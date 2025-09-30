@@ -1,0 +1,1 @@
+low usage alert should be based on previous month stock

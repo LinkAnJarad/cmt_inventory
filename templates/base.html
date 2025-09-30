@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>TUA Lab Equipment/Consumables Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+      background: #16a34a;
+      border-radius: 3px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+      background: #15803d;
+    }
+    
+    /* Smooth transitions */
+    * {
+      transition: all 0.2s ease-in-out;
+    }
+    
+    /* Medical-inspired animations */
+    .fade-in {
+      animation: fadeIn 0.5s ease-out;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    /* Custom shadows for depth */
+    .medical-shadow {
+      box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.1), 0 2px 4px -1px rgba(16, 185, 129, 0.06);
+    }
+    
+    .medical-shadow-lg {
+      box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.1), 0 4px 6px -2px rgba(16, 185, 129, 0.05);
+    }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-green-50 via-gray-50 to-green-50 min-h-screen">
+  
+  {% if session.get('user_id') %}
+  <!-- Navigation Header - Only show when logged in -->
+  <nav class="bg-gradient-to-r from-green-600 via-green-700 to-green-800 shadow-lg sticky top-0 z-50">
+    <div class="container mx-auto px-4">
+      <div class="flex justify-between items-center py-4">
+        <!-- Logo and Brand -->
+        <div class="flex items-center space-x-4">
+          <img src="{{ url_for('static', filename='/cmt.png') }}" class="h-10 w-10">
+          <div>
+            <a href="/dashboard" class="text-white font-bold text-lg hover:text-green-100 transition-colors">
+              Lab Equipment/Consumables Usage Tracker
+            </a>
+            <p class="text-green-100 text-xs hidden sm:block">Trinity University of Asia - Medical Technology</p>
+          </div>
+        </div>
+        
+        <!-- Navigation Links -->
+        <div class="flex items-center space-x-6">
+          <!-- Back to Dashboard Button -->
+          <a href="/dashboard" class="group flex items-center space-x-2 bg-white bg-opacity-10 hover:bg-opacity-20 px-4 py-2 rounded-lg text-white hover:text-green-100 transition-all duration-200">
+            <svg class="h-4 w-4 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z"/>
+            </svg>
+            <span class="font-medium hidden sm:inline">Dashboard</span>
+          </a>
+          
+          <div class="hidden md:flex items-center space-x-1">
+            <svg class="h-4 w-4 text-green-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+            </svg>
+            <span class="text-green-100 text-sm">Logged in as {{ session.get('role', 'User').title() }}</span>
+          </div>
+          
+          <a href="/logout" class="group flex items-center space-x-2 bg-white bg-opacity-10 hover:bg-opacity-20 px-4 py-2 rounded-lg text-white hover:text-green-100 transition-all duration-200">
+            <svg class="h-4 w-4 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/>
+            </svg>
+            <span class="font-medium">Logout</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </nav>
+  {% endif %}
+
+  <!-- Main Content Area -->
+  <main class="{% if session.get('user_id') %}container mx-auto px-4 py-8{% endif %} fade-in">
+    <div class="{% if session.get('user_id') %}max-w-7xl mx-auto{% endif %}">
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+
+  {% if session.get('user_id') %}
+  <!-- Footer - Only show when logged in -->
+  <footer class="mt-auto bg-white border-t border-green-100">
+    <div class="container mx-auto px-4 py-6">
+      <div class="flex flex-col md:flex-row justify-between items-center text-sm text-gray-600">
+        <div class="flex items-center space-x-2 mb-2 md:mb-0">
+          <span>Lab Equipment/Consumable Usage Tracker</span>
+        </div>
+        <div class="text-center md:text-right">
+          <p>© 2025 Trinity University of Asia</p>
+          <p class="text-xs text-gray-500">College of Medical Technology</p>
+        </div>
+      </div>
+    </div>
+  </footer>
+  {% endif %}
+</body>
+</html>

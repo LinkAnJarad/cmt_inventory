@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-6">Return Equipment</h1>
+
+<div class="bg-white rounded-lg shadow p-6 space-y-6">
+  <div>
+    <h2 class="text-lg font-semibold mb-2">Borrow Details</h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+      <div>
+        <div class="text-gray-500">Student</div>
+        <div class="font-medium text-gray-900">{{ log.student_name }} ({{ log.student_number }})</div>
+      </div>
+      <div>
+        <div class="text-gray-500">Course / Section</div>
+        <div class="font-medium text-gray-900">{{ log.course }} / {{ log.section }}</div>
+      </div>
+      <div>
+        <div class="text-gray-500">Equipment</div>
+        <div class="font-medium text-gray-900">{{ log.equipment.description if log.equipment else '—' }}</div>
+      </div>
+      <div>
+        <div class="text-gray-500">Borrowed At</div>
+        <div class="font-medium text-gray-900">{{ log.borrowed_at }}</div>
+      </div>
+      <div class="md:col-span-2">
+        <div class="text-gray-500">Purpose</div>
+        <div class="font-medium text-gray-900">{{ log.purpose }}</div>
+      </div>
+      {% if log.returned_at %}
+      <div class="md:col-span-2">
+        <div class="text-gray-500">Already Returned At</div>
+        <div class="font-medium text-gray-900">{{ log.returned_at }}</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <form method="POST" class="space-y-4">
+    <h2 class="text-lg font-semibold">Return & Optional Issue/Note</h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label for="note_type" class="block text-sm font-medium text-gray-700">Issue Type</label>
+        <select id="note_type" name="note_type" class="mt-1 block w-full border border-gray-300 rounded px-3 py-2">
+          <option value="none" selected>None</option>
+          <option value="damaged">Damaged</option>
+          <option value="lost">Lost</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="md:col-span-2">
+        <label for="description" class="block text-sm font-medium text-gray-700">Issue Description (optional unless Issue Type selected)</label>
+      </div>
+      <div class="md:col-span-2">
+        <textarea id="description" name="description" rows="4" class="mt-1 block w-full border border-gray-300 rounded px-3 py-2" placeholder="Describe the issue (e.g., cracked casing, missing cable)..."></textarea>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Mark as Returned</button>
+      <a href="{{ url_for('history') }}" class="px-4 py-2 rounded border border-gray-300 hover:bg-gray-50">Cancel</a>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

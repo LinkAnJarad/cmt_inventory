@@ -1,0 +1,283 @@
+{% extends "base.html" %}
+{% block content %}
+<!-- Page Header -->
+<div class="bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl shadow-xl text-white p-6 mb-8 medical-shadow-lg">
+  <div class="flex items-center justify-between flex-wrap gap-4">
+    <div class="flex items-center space-x-4">
+      <div class="h-12 w-12 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
+        <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-2xl font-bold">Consumables Inventory</h1>
+        <p class="text-blue-100 text-sm">Manage laboratory consumables and track expiration dates</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Search and Actions Bar -->
+<div class="bg-white rounded-xl shadow-lg border border-blue-100 p-6 mb-6 medical-shadow">
+  <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+    <!-- Search Form -->
+    <div class="flex-1 max-w-2xl">
+      <form method="GET" action="{{ url_for('consumables') }}" class="flex items-center gap-3">
+        <div class="relative flex-1">
+          <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <svg class="h-5 w-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+          </div>
+          <input
+            type="text"
+            name="q"
+            value="{{ q|default('') }}"
+            placeholder="Search by description, unit, lot #, expiration, etc."
+            class="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 bg-gray-50 focus:bg-white"
+            aria-label="Search consumables"
+          />
+        </div>
+        <!-- Keep current sort while searching -->
+        <input type="hidden" name="sort" value="{{ sort|default('description') }}">
+        <input type="hidden" name="dir" value="{{ dir|default('asc') }}">
+        <button type="submit" class="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-lg hover:from-blue-700 hover:to-blue-800 font-medium transition duration-200 shadow-lg hover:shadow-xl">
+          Search
+        </button>
+        <a href="{{ url_for('consumables') }}" class="px-6 py-3 rounded-lg border border-gray-300 hover:bg-gray-50 font-medium transition duration-200">
+          Clear
+        </a>
+      </form>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="flex items-center gap-3">
+      <!-- Export PDF -->
+      <a href="{{ url_for('export_consumables_pdf', q=q, sort=sort, dir=dir) }}"
+         class="group flex items-center space-x-2 bg-gray-700 text-white px-4 py-3 rounded-lg hover:bg-gray-800 font-medium transition duration-200 shadow-lg"
+         title="Export current view to PDF">
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+        <span>Export PDF</span>
+      </a>
+
+      {% if session.role == 'tech' %}
+      <a href="/use_consumable" class="group flex items-center space-x-2 bg-gradient-to-r from-orange-600 to-orange-700 text-white px-4 py-3 rounded-lg hover:from-orange-700 hover:to-orange-800 font-medium transition duration-200 shadow-lg">
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/>
+        </svg>
+        <span>Use Consumable</span>
+      </a>
+      {% endif %}
+
+      {% if session.role in ['admin', 'tech'] %}
+      <a href="{{ url_for('add_consumable') }}" class="group flex items-center space-x-2 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white px-4 py-3 rounded-lg hover:from-emerald-700 hover:to-emerald-800 font-medium transition duration-200 shadow-lg">
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+        </svg>
+        <span>Add Consumable</span>
+      </a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if q %}
+  <div class="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+    <p class="text-sm text-blue-700">
+      <svg class="inline h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+      Search results for "<span class="font-semibold">{{ q }}</span>"
+    </p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Consumables Table -->
+<div class="bg-white rounded-xl shadow-lg border border-blue-100 overflow-hidden medical-shadow">
+  <div class="overflow-x-auto">
+    <table class="min-w-full divide-y divide-gray-200">
+      <thead class="bg-gradient-to-r from-gray-50 to-blue-50">
+        <tr>
+          {# Helper for sort arrows #}
+          {% set _sort = sort|default('description') %}
+          {% set _dir = dir|default('asc') %}
+
+          {% macro sort_link(label, field) -%}
+            {%- set is_sorted = (_sort == field) -%}
+            {%- set next_dir = 'desc' if is_sorted and _dir == 'asc' else 'asc' -%}
+            <a
+              href="{{ url_for('consumables', sort=field, dir=next_dir, q=q) }}"
+              class="group inline-flex items-center gap-2 text-gray-700 hover:text-blue-700 font-medium transition-colors"
+            >
+              <span>{{ label }}</span>
+              {%- if is_sorted -%}
+                <span class="text-blue-600 text-sm">{{ '▲' if _dir == 'asc' else '▼' }}</span>
+              {%- else -%}
+                <span class="text-gray-400 group-hover:text-blue-500 text-sm opacity-0 group-hover:opacity-100 transition-opacity">↕</span>
+              {%- endif -%}
+            </a>
+          {%- endmacro %}
+
+          <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            {{ sort_link('Description', 'description') }}
+          </th>
+          <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            {{ sort_link('Balance Stock', 'balance_stock') }}
+          </th>
+          <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            {{ sort_link('Unit', 'unit') }}
+          </th>
+          <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            {{ sort_link('Returnable', 'is_returnable') }}
+          </th>
+          <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            {{ sort_link('Expiration', 'expiration') }}
+          </th>
+          <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            {{ sort_link('Lot #', 'lot_number') }}
+          </th>
+          <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            {{ sort_link('Date Received', 'date_received') }}
+          </th>
+          <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            {{ sort_link('Items Out', 'items_out') }}
+          </th>
+          <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            {{ sort_link('Items In Stock', 'items_on_stock') }}
+          </th>
+          <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            {{ sort_link('Previous Month Stock', 'previous_month_stock') }}
+          </th>
+          <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            {{ sort_link('Units Consumed', 'units_consumed') }}
+          </th>
+          <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            {{ sort_link('Units Expired', 'units_expired') }}
+          </th>
+          {% if session.role in ['admin', 'tech'] %}
+          <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
+          {% endif %}
+        </tr>
+      </thead>
+
+      <tbody class="bg-white divide-y divide-gray-100">
+        {% for item in items %}
+        <tr class="hover:bg-blue-50 transition-colors duration-150">
+          <td class="px-6 py-4 whitespace-nowrap">
+            <div class="flex items-center">
+              <div class="h-2 w-2 bg-blue-500 rounded-full mr-3"></div>
+              <span class="text-sm font-semibold text-gray-900">{{ item.description }}</span>
+            </div>
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {% if item.balance_stock > 0 %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
+              {{ item.balance_stock }}
+            </span>
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ item.unit }}</td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+            {% if item.is_returnable %}
+              <span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-green-100 text-green-800">
+                <svg class="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                Returnable
+              </span>
+            {% else %}
+              <span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-800">
+                <svg class="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+                Consumed
+              </span>
+            {% endif %}
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+            {% if item.expiration != 'N/A' %}
+              <span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-yellow-100 text-yellow-800">
+                {{ item.expiration }}
+              </span>
+            {% else %}
+              <span class="text-gray-400">{{ item.expiration }}</span>
+            {% endif %}
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 font-mono">{{ item.lot_number }}</td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ item.date_received }}</td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {% if item.items_out > 0 %}bg-orange-100 text-orange-800{% else %}bg-gray-100 text-gray-800{% endif %}">
+              {{ item.items_out }}
+            </span>
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {% if item.items_on_stock > 0 %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
+              {{ item.items_on_stock }}
+            </span>
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ item.previous_month_stock }}</td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ item.units_consumed }}</td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ item.units_expired }}</td>
+          {% if session.role in ['admin', 'tech'] %}
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+            <div class="flex space-x-3">
+              <a href="{{ url_for('use_consumable_row', id=item.id) }}" 
+                class="inline-flex items-center text-orange-600 hover:text-orange-800 font-medium transition-colors">
+                <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/>
+                </svg>
+                Use
+              </a>
+              <a href="{{ url_for('edit_consumable', id=item.id) }}" 
+                class="inline-flex items-center text-blue-600 hover:text-blue-800 font-medium transition-colors">
+                <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                </svg>
+                Edit
+              </a>
+              <form method="POST" action="{{ url_for('delete_consumable', id=item.id) }}" 
+                    onsubmit="return confirm('Are you sure you want to delete this consumable?')" class="inline">
+                <button type="submit" class="inline-flex items-center text-red-600 hover:text-red-800 font-medium transition-colors">
+                  <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                  </svg>
+                  Delete
+                </button>
+              </form>
+            </div>
+          </td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Empty State -->
+{% if items|length == 0 %}
+<div class="bg-white rounded-xl shadow-lg border border-blue-100 p-12 text-center medical-shadow">
+  <div class="mx-auto h-16 w-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+    <svg class="h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+    </svg>
+  </div>
+  <h3 class="text-lg font-semibold text-gray-900 mb-2">No Consumables Found</h3>
+  <p class="text-gray-600 mb-4">
+    {% if q %}
+      No consumables found for "<span class="font-medium">{{ q }}</span>". Try adjusting your search terms.
+    {% else %}
+      No consumables available in the inventory.
+    {% endif %}
+  </p>
+  {% if session.role in ['admin', 'tech'] and not q %}
+  <a href="{{ url_for('add_consumable') }}" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+    <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+    </svg>
+    Add First Consumable
+  </a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

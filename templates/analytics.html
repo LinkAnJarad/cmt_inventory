@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block content %}
+
+<!-- Analytics Header -->
+<div class="bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl shadow-xl text-white p-8 mb-8">
+  <div class="flex items-center justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="text-3xl font-bold mb-2">Lab Analytics Dashboard</h1>
+      <p class="text-blue-100 text-lg">Equipment and consumable usage insights</p>
+    </div>
+    <div class="hidden md:block">
+      <div class="h-16 w-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
+        <svg class="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Analytics Cards Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+  <!-- Low Stock Alert -->
+  <div class="bg-white rounded-xl shadow-lg border border-red-100 p-6">
+    <div class="flex items-center mb-4">
+      <div class="h-10 w-10 bg-red-500 rounded-lg flex items-center justify-center mr-3">
+        <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.464 0L4.35 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+        </svg>
+      </div>
+      <h2 class="text-xl font-semibold text-gray-900">Low Stock Alert</h2>
+    </div>
+    <p class="text-sm text-gray-600 mb-4">Items below 10% of total stock</p>
+    
+    {% if low_stock %}
+      <div class="space-y-2">
+        {% for item in low_stock %}
+        <div class="flex justify-between items-center p-3 bg-red-50 rounded-lg border border-red-200">
+          <div>
+            <div class="font-medium text-gray-900">{{ item.description }}</div>
+            <div class="text-sm text-gray-600">{{ item.unit }}</div>
+          </div>
+          <div class="text-right">
+            <div class="text-red-600 font-semibold">{{ item.items_on_stock or 0 }}</div>
+            <div class="text-xs text-gray-500">of {{ item.previous_month_stock or 0 }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-gray-500 italic">No low stock items</p>
+    {% endif %}
+  </div>
+
+  <!-- Most Borrowed Equipment -->
+  <div class="bg-white rounded-xl shadow-lg border border-green-100 p-6">
+    <div class="flex items-center mb-4">
+      <div class="h-10 w-10 bg-green-500 rounded-lg flex items-center justify-center mr-3">
+        <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+        </svg>
+      </div>
+      <h2 class="text-xl font-semibold text-gray-900">Most Borrowed Equipment</h2>
+    </div>
+    <p class="text-sm text-gray-600 mb-4">Top 5 most requested items</p>
+    
+    {% if most_borrowed %}
+      <div class="space-y-2">
+        {% for equipment, count in most_borrowed %}
+        <div class="flex justify-between items-center p-3 bg-green-50 rounded-lg border border-green-200">
+          <div>
+            <div class="font-medium text-gray-900">{{ equipment.description }}</div>
+            <div class="text-sm text-gray-600">{{ equipment.brand_name or 'N/A' }}</div>
+          </div>
+          <div class="bg-green-500 text-white px-3 py-1 rounded-full text-sm font-semibold">
+            {{ count }} borrows
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-gray-500 italic">No borrowing data available</p>
+    {% endif %}
+  </div>
+
+  <!-- Near Expiration -->
+  <div class="bg-white rounded-xl shadow-lg border border-orange-100 p-6">
+    <div class="flex items-center mb-4">
+      <div class="h-10 w-10 bg-orange-500 rounded-lg flex items-center justify-center mr-3">
+        <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+      </div>
+      <h2 class="text-xl font-semibold text-gray-900">Near Expiration</h2>
+    </div>
+    <p class="text-sm text-gray-600 mb-4">Items expiring within 30 days</p>
+    
+    {% if near_expiration %}
+      <div class="space-y-2 max-h-64 overflow-y-auto">
+        {% for item in near_expiration %}
+        <div class="flex justify-between items-center p-3 bg-orange-50 rounded-lg border border-orange-200">
+          <div>
+            <div class="font-medium text-gray-900">{{ item.description }}</div>
+            <div class="text-sm text-gray-600">Lot: {{ item.lot_number or 'N/A' }}</div>
+          </div>
+          <div class="text-right">
+            <div class="text-orange-600 font-semibold">{{ item.expiration }}</div>
+            <div class="text-xs text-gray-500">{{ item.items_on_stock or 0 }} in stock</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-gray-500 italic">No items expiring soon</p>
+    {% endif %}
+  </div>
+
+  <!-- Top Consumed Items -->
+  <div class="bg-white rounded-xl shadow-lg border border-purple-100 p-6">
+    <div class="flex items-center mb-4">
+      <div class="h-10 w-10 bg-purple-500 rounded-lg flex items-center justify-center mr-3">
+        <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+        </svg>
+      </div>
+      <h2 class="text-xl font-semibold text-gray-900">Top Consumed Items</h2>
+    </div>
+    <p class="text-sm text-gray-600 mb-4">Most used consumables</p>
+    
+    {% if top_consumed %}
+      <div class="space-y-2">
+        {% for item in top_consumed %}
+        <div class="flex justify-between items-center p-3 bg-purple-50 rounded-lg border border-purple-200">
+          <div>
+            <div class="font-medium text-gray-900">{{ item.description }}</div>
+            <div class="text-sm text-gray-600">{{ item.unit }}</div>
+          </div>
+          <div class="bg-purple-500 text-white px-3 py-1 rounded-full text-sm font-semibold">
+            {{ item.units_consumed or 0 }} used
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-gray-500 italic">No consumption data available</p>
+    {% endif %}
+  </div>
+
+</div>
+
+
+{% endblock %}

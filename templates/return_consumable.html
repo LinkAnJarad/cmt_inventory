@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-6">Return Consumable</h1>
+
+<div class="bg-white rounded-lg shadow p-6 space-y-6">
+  <div>
+    <h2 class="text-lg font-semibold mb-2">Usage Details</h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+      <div>
+        <div class="text-gray-500">User</div>
+        <div class="font-medium text-gray-900">{{ log.user_name }} ({{ log.user_type.title() }})</div>
+      </div>
+      <div>
+        <div class="text-gray-500">Section + Course</div>
+        <div class="font-medium text-gray-900">{{ log.section_course }}</div>
+      </div>
+      <div>
+        <div class="text-gray-500">Consumable</div>
+        <div class="font-medium text-gray-900">{{ log.consumable.description if log.consumable else '—' }}</div>
+      </div>
+      <div>
+        <div class="text-gray-500">Quantity Used</div>
+        <div class="font-medium text-gray-900">{{ log.quantity_used }} {{ log.consumable.unit if log.consumable else '' }}</div>
+      </div>
+      <div>
+        <div class="text-gray-500">Used At</div>
+        <div class="font-medium text-gray-900">{{ log.used_at }}</div>
+      </div>
+      <div>
+        <div class="text-gray-500">Returnable</div>
+        <div class="font-medium text-gray-900">
+          {% if log.consumable and log.consumable.is_returnable %}
+            <span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-green-100 text-green-800">
+              <svg class="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4"/>
+              </svg>
+              Yes (Powder/Liquid)
+            </span>
+          {% else %}
+            <span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-800">
+              <svg class="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+              No (Consumed)
+            </span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="md:col-span-2">
+        <div class="text-gray-500">Purpose</div>
+        <div class="font-medium text-gray-900">{{ log.purpose }}</div>
+      </div>
+      {% if log.returned_at %}
+      <div class="md:col-span-2">
+        <div class="text-gray-500">Already Returned At</div>
+        <div class="font-medium text-gray-900">{{ log.returned_at }}</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if log.consumable and log.consumable.is_returnable and not log.returned_at %}
+  <form method="POST" class="space-y-4">
+    <h2 class="text-lg font-semibold">Return & Optional Issue/Note</h2>
+    
+    <!-- Return Quantity Section -->
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+      <div class="flex items-start space-x-3">
+        <div class="flex-shrink-0">
+          <svg class="h-5 w-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+        </div>
+        <div class="flex-1">
+          <h3 class="text-sm font-medium text-blue-800 mb-2">Return Information</h3>
+          <p class="text-sm text-blue-700 mb-3">
+            This consumable was marked as returnable (powder/liquid). Returning unused quantity will add it back to inventory stock.
+          </p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label for="quantity_returned" class="block text-sm font-medium text-blue-800">Quantity to Return</label>
+              <div class="mt-1 relative">
+                <input type="number" id="quantity_returned" name="quantity_returned" 
+                       min="0" max="{{ log.quantity_used }}" value="{{ log.quantity_used }}"
+                       class="block w-full border border-blue-300 rounded px-3 py-2 focus:ring-blue-500 focus:border-blue-500">
+                <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                  <span class="text-gray-500 text-sm">{{ log.consumable.unit if log.consumable else '' }}</span>
+                </div>
+              </div>
+              <p class="mt-1 text-xs text-blue-600">Maximum: {{ log.quantity_used }} {{ log.consumable.unit if log.consumable else '' }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Issue Reporting Section -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label for="note_type" class="block text-sm font-medium text-gray-700">Issue Type</label>
+        <select id="note_type" name="note_type" class="mt-1 block w-full border border-gray-300 rounded px-3 py-2">
+          <option value="none" selected>None</option>
+          <option value="contaminated">Contaminated</option>
+          <option value="expired">Expired During Use</option>
+          <option value="spilled">Spilled/Wasted</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="md:col-span-2">
+        <label for="description" class="block text-sm font-medium text-gray-700">Issue Description (optional unless Issue Type selected)</label>
+      </div>
+      <div class="md:col-span-2">
+        <textarea id="description" name="description" rows="4" 
+                  class="mt-1 block w-full border border-gray-300 rounded px-3 py-2" 
+                  placeholder="Describe the issue (e.g., container contaminated, partial spillage, quality concerns)..."></textarea>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Mark as Returned</button>
+      <a href="{{ url_for('history') }}" class="px-4 py-2 rounded border border-gray-300 hover:bg-gray-50">Cancel</a>
+    </div>
+  </form>
+  
+  {% elif not log.consumable.is_returnable %}
+  <!-- Non-returnable Message -->
+  <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+    <div class="flex items-center space-x-3">
+      <div class="flex-shrink-0">
+        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </div>
+      <div>
+        <h3 class="text-sm font-medium text-gray-800">Not Returnable</h3>
+        <p class="text-sm text-gray-600">This consumable was marked as consumed and cannot be returned to inventory.</p>
+      </div>
+    </div>
+    <div class="mt-4">
+      <a href="{{ url_for('history') }}" class="px-4 py-2 rounded border border-gray-300 hover:bg-gray-50">Back to History</a>
+    </div>
+  </div>
+  
+  {% else %}
+  <!-- Already Returned Message -->
+  <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+    <div class="flex items-center space-x-3">
+      <div class="flex-shrink-0">
+        <svg class="h-5 w-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4"/>
+        </svg>
+      </div>
+      <div>
+        <h3 class="text-sm font-medium text-green-800">Already Returned</h3>
+        <p class="text-sm text-green-600">This consumable has already been returned to inventory.</p>
+      </div>
+    </div>
+    <div class="mt-4">
+      <a href="{{ url_for('history') }}" class="px-4 py-2 rounded border border-gray-300 hover:bg-gray-50">Back to History</a>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

@@ -1,0 +1,450 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-purple-50 to-purple-100 py-8 px-4 sm:px-6 lg:px-8 rounded-2xl">
+  <div class="max-w-7xl mx-auto">
+    <!-- Header Section -->
+    <div class="text-center mb-8">
+      <div class="mx-auto h-16 w-16 bg-gradient-to-r from-purple-600 to-purple-700 rounded-full flex items-center justify-center shadow-lg mb-4">
+        <svg class="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+        </svg>
+      </div>
+      <h1 class="text-3xl font-bold text-gray-900 mb-2">Bulk Operations</h1>
+      <p class="text-sm text-gray-600">Efficient bulk borrowing and usage operations</p>
+      <p class="text-xs text-purple-600 font-medium">Trinity University of Asia - College of Medical Technology</p>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="mb-8">
+      <div class="flex justify-center">
+        <nav class="flex space-x-1 bg-white p-1 rounded-lg shadow-lg border border-purple-100" aria-label="Tabs">
+          <button onclick="switchTab('equipment')" id="equipment-tab" 
+                  class="tab-button active flex items-center px-6 py-3 text-sm font-medium rounded-md transition-all duration-200">
+            <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 9.172V5L8 4z"/>
+            </svg>
+            Bulk Equipment Borrowing
+          </button>
+          <button onclick="switchTab('consumables')" id="consumables-tab" 
+                  class="tab-button flex items-center px-6 py-3 text-sm font-medium rounded-md transition-all duration-200">
+            <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+            </svg>
+            Bulk Consumable Usage
+          </button>
+        </nav>
+      </div>
+    </div>
+
+    <!-- Equipment Borrowing Section -->
+    <div id="equipment-section" class="tab-content">
+      <div class="bg-white rounded-2xl shadow-xl border border-green-100 overflow-hidden">
+        <!-- Equipment Header -->
+        <div class="px-8 py-6 bg-gradient-to-r from-green-50 to-emerald-50 border-b border-green-100">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+              <div class="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center">
+                <svg class="h-4 w-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                </svg>
+              </div>
+              <h2 class="text-lg font-semibold text-gray-800">Bulk Equipment Borrowing</h2>
+            </div>
+            <span class="text-xs text-gray-500 bg-white px-2 py-1 rounded-full">Add multiple equipment items</span>
+          </div>
+        </div>
+
+        <!-- Equipment Form -->
+        <div class="px-8 py-8">
+          <form method="POST" action="{{ url_for('bulk_borrow_equipment') }}" class="space-y-8">
+            <!-- Borrower Information -->
+            <div class="space-y-6">
+              <div class="border-l-4 border-green-500 pl-4">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Borrower Information</h3>
+              </div>
+              
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Borrower Name *</label>
+                  <input type="text" name="borrower_name" required
+                         class="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 bg-gray-50 focus:bg-white">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Borrower Type *</label>
+                  <select name="borrower_type" required
+                          class="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 bg-gray-50 focus:bg-white">
+                    <option value="">Select type</option>
+                    <option value="student">Student</option>
+                    <option value="faculty">Faculty</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Section + Course *</label>
+                  <input type="text" name="section_course" required
+                         placeholder="e.g., CMT-1A Clinical Chemistry"
+                         class="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 bg-gray-50 focus:bg-white">
+                </div>
+              </div>
+              
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Purpose *</label>
+                <textarea name="purpose" required rows="3"
+                          placeholder="Describe the purpose for borrowing these equipment items"
+                          class="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 bg-gray-50 focus:bg-white resize-none"></textarea>
+              </div>
+            </div>
+
+            <!-- Equipment Selection -->
+            <div class="space-y-6">
+              <div class="border-l-4 border-blue-500 pl-4">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Equipment Selection</h3>
+              </div>
+              
+              <div id="equipment-list" class="space-y-4">
+                <div class="equipment-item bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="md:col-span-2">
+                      <label class="block text-sm font-medium text-gray-700 mb-2">Equipment</label>
+                      <select name="equipment_ids[]" required
+                              class="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500">
+                        <option value="">Choose equipment</option>
+                        {% for item in equipment %}
+                          <option value="{{ item.id }}">{{ item.description }}</option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
+                      <div class="flex items-center space-x-2">
+                        <input type="number" name="quantities[]" min="1" value="1" required
+                               class="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500">
+                        <button type="button" onclick="removeEquipmentItem(this)" 
+                                class="text-red-600 hover:text-red-800 p-2 rounded-lg hover:bg-red-50 transition-colors">
+                          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <button type="button" onclick="addEquipmentItem()" 
+                      class="flex items-center space-x-2 text-green-600 hover:text-green-800 font-medium transition-colors">
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                </svg>
+                <span>Add Another Equipment</span>
+              </button>
+            </div>
+
+            <!-- Equipment Submit Button -->
+            <div class="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 pt-6 border-t border-gray-200">
+              <button type="submit" 
+                      class="group relative flex-1 sm:flex-none flex justify-center items-center py-3 px-6 border border-transparent text-sm font-medium rounded-lg text-white bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
+                <svg class="h-5 w-5 mr-2 text-green-300 group-hover:text-green-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4"/>
+                </svg>
+                Borrow All Equipment
+              </button>
+              <a href="{{ url_for('equipment') }}" 
+                 class="flex-1 sm:flex-none flex justify-center items-center py-3 px-6 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition duration-200">
+                Cancel
+              </a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Consumables Usage Section -->
+    <div id="consumables-section" class="tab-content hidden">
+      <div class="bg-white rounded-2xl shadow-xl border border-blue-100 overflow-hidden">
+        <!-- Consumables Header -->
+        <div class="px-8 py-6 bg-gradient-to-r from-blue-50 to-cyan-50 border-b border-blue-100">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+              <div class="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center">
+                <svg class="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                </svg>
+              </div>
+              <h2 class="text-lg font-semibold text-gray-800">Bulk Consumable Usage</h2>
+            </div>
+            <span class="text-xs text-gray-500 bg-white px-2 py-1 rounded-full">Track multiple consumable usage</span>
+          </div>
+        </div>
+
+        <!-- Consumables Form -->
+        <div class="px-8 py-8">
+          <form method="POST" action="{{ url_for('bulk_use_consumables') }}" class="space-y-8">
+            <!-- User Information -->
+            <div class="space-y-6">
+              <div class="border-l-4 border-blue-500 pl-4">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">User Information</h3>
+              </div>
+              
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">User Name *</label>
+                  <input type="text" name="user_name" required
+                         class="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 bg-gray-50 focus:bg-white">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">User Type *</label>
+                  <select name="user_type" required
+                          class="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 bg-gray-50 focus:bg-white">
+                    <option value="">Select type</option>
+                    <option value="student">Student</option>
+                    <option value="faculty">Faculty</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Section + Course *</label>
+                  <input type="text" name="section_course" required
+                         placeholder="e.g., CMT-1A Clinical Chemistry"
+                         class="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 bg-gray-50 focus:bg-white">
+                </div>
+              </div>
+              
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Purpose *</label>
+                <textarea name="purpose" required rows="3"
+                          placeholder="Describe the purpose for using these consumables"
+                          class="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 bg-gray-50 focus:bg-white resize-none"></textarea>
+              </div>
+            </div>
+
+            <!-- Consumables Selection -->
+            <div class="space-y-6">
+              <div class="border-l-4 border-orange-500 pl-4">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Consumables Selection</h3>
+              </div>
+              
+              <div id="consumables-list" class="space-y-4">
+                <div class="consumable-item bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="md:col-span-2">
+                      <label class="block text-sm font-medium text-gray-700 mb-2">Consumable</label>
+                      <select name="consumable_ids[]" required
+                              class="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        <option value="">Choose consumable</option>
+                        {% for item in consumables %}
+                          <option value="{{ item.id }}">{{ item.description }} ({{ item.unit }})</option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
+                      <div class="flex items-center space-x-2">
+                        <input type="number" name="quantities[]" min="1" value="1" required
+                               class="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        <button type="button" onclick="removeConsumableItem(this)" 
+                                class="text-red-600 hover:text-red-800 p-2 rounded-lg hover:bg-red-50 transition-colors">
+                          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <button type="button" onclick="addConsumableItem()" 
+                      class="flex items-center space-x-2 text-blue-600 hover:text-blue-800 font-medium transition-colors">
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                </svg>
+                <span>Add Another Consumable</span>
+              </button>
+            </div>
+
+            <!-- Consumables Submit Button -->
+            <div class="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 pt-6 border-t border-gray-200">
+              <button type="submit" 
+                      class="group relative flex-1 sm:flex-none flex justify-center items-center py-3 px-6 border border-transparent text-sm font-medium rounded-lg text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
+                <svg class="h-5 w-5 mr-2 text-blue-300 group-hover:text-blue-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                Record All Usage
+              </button>
+              <a href="{{ url_for('consumables') }}" 
+                 class="flex-1 sm:flex-none flex justify-center items-center py-3 px-6 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition duration-200">
+                Cancel
+              </a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- JavaScript for Tab Switching and Dynamic Forms -->
+<script>
+  function switchTab(tab) {
+    // Hide all sections
+    document.getElementById('equipment-section').classList.add('hidden');
+    document.getElementById('consumables-section').classList.add('hidden');
+    
+    // Remove active class from all tabs
+    document.getElementById('equipment-tab').classList.remove('active');
+    document.getElementById('consumables-tab').classList.remove('active');
+    
+    // Show selected section and activate tab
+    if (tab === 'equipment') {
+      document.getElementById('equipment-section').classList.remove('hidden');
+      document.getElementById('equipment-tab').classList.add('active');
+    } else {
+      document.getElementById('consumables-section').classList.remove('hidden');
+      document.getElementById('consumables-tab').classList.add('active');
+    }
+  }
+
+  function addEquipmentItem() {
+    const equipmentList = document.getElementById('equipment-list');
+    const newItem = document.createElement('div');
+    newItem.className = 'equipment-item bg-gray-50 p-4 rounded-lg border border-gray-200';
+    newItem.innerHTML = `
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-2">Equipment</label>
+          <select name="equipment_ids[]" required
+                  class="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500">
+            <option value="">Choose equipment</option>
+            {% for item in equipment %}
+              <option value="{{ item.id }}">{{ item.description }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
+          <div class="flex items-center space-x-2">
+            <input type="number" name="quantities[]" min="1" value="1" required
+                   class="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500">
+            <button type="button" onclick="removeEquipmentItem(this)" 
+                    class="text-red-600 hover:text-red-800 p-2 rounded-lg hover:bg-red-50 transition-colors">
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    equipmentList.appendChild(newItem);
+  }
+
+  function removeEquipmentItem(button) {
+    const item = button.closest('.equipment-item');
+    const list = document.getElementById('equipment-list');
+    if (list.children.length > 1) {
+      item.remove();
+    }
+  }
+
+  function addConsumableItem() {
+    const consumablesList = document.getElementById('consumables-list');
+    const newItem = document.createElement('div');
+    newItem.className = 'consumable-item bg-gray-50 p-4 rounded-lg border border-gray-200';
+    newItem.innerHTML = `
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-2">Consumable</label>
+          <select name="consumable_ids[]" required
+                  class="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+            <option value="">Choose consumable</option>
+            {% for item in consumables %}
+              <option value="{{ item.id }}">{{ item.description }} ({{ item.unit }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
+          <div class="flex items-center space-x-2">
+            <input type="number" name="quantities[]" min="1" value="1" required
+                   class="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+            <button type="button" onclick="removeConsumableItem(this)" 
+                    class="text-red-600 hover:text-red-800 p-2 rounded-lg hover:bg-red-50 transition-colors">
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    consumablesList.appendChild(newItem);
+  }
+
+  function removeConsumableItem(button) {
+    const item = button.closest('.consumable-item');
+    const list = document.getElementById('consumables-list');
+    if (list.children.length > 1) {
+      item.remove();
+    }
+  }
+</script>
+
+<!-- Custom Styles -->
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  
+  body {
+    font-family: 'Inter', sans-serif;
+  }
+  
+  .max-w-7xl {
+    animation: fadeInUp 0.6s ease-out;
+  }
+  
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(30px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .tab-button {
+    color: #6B7280;
+    background-color: transparent;
+  }
+  
+  .tab-button.active {
+    color: #7C3AED;
+    background-color: #F3F4F6;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+  }
+  
+  .tab-button:hover:not(.active) {
+    color: #374151;
+    background-color: #F9FAFB;
+  }
+  
+  input:focus, textarea:focus, select:focus {
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+  }
+  
+  button:hover {
+    transform: translateY(-1px);
+  }
+  
+  .equipment-item, .consumable-item {
+    transition: all 0.3s ease;
+  }
+  
+  .equipment-item:hover, .consumable-item:hover {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  }
+</style>
+{% endblock %}
