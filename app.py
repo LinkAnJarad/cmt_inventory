@@ -58,14 +58,29 @@ def normalize_row_nonnegatives(row: Consumable):
     row.items_on_stock = _clamp_nonneg(row.items_on_stock)
     row.units_consumed = _clamp_nonneg(row.units_consumed)
 
+def recalc_row_level_values(row: Consumable):
+    """
+    Calculate row-level values:
+      balance_stock = items_out + items_on_stock
+      previous_month_stock = balance_stock + units_consumed
+    """
+    # Normalize row-level nonnegatives first
+    normalize_row_nonnegatives(row)
+    
+    # Calculate balance_stock for this specific row
+    row_balance_stock = _clamp_nonneg(_to_int(row.items_out, 0) + _to_int(row.items_on_stock, 0))
+    
+    # Calculate previous_month_stock for this specific row
+    row_previous_month_stock = _clamp_nonneg(row_balance_stock + _to_int(row.units_consumed, 0))
+    
+    # Assign the calculated values to the row
+    row.balance_stock = row_balance_stock
+    row.previous_month_stock = row_previous_month_stock
+
 def recalc_group_by_description(description: str):
     """
-    Enforce description-level constraints by aggregation:
-      group_balance_stock = sum(items_out) + sum(items_on_stock)
-      group_previous_month_stock = group_balance_stock + sum(units_consumed)
-
-    Then write those group-level values into every row for this description so
-    balance_stock and previous_month_stock are identical across the group.
+    Calculate row-level balance_stock and previous_month_stock for each row
+    with the given description independently.
     """
     if not description:
         return
@@ -73,20 +88,10 @@ def recalc_group_by_description(description: str):
     if not rows:
         return
 
-    # Normalize row-level nonnegatives
-    for r in rows:
-        normalize_row_nonnegatives(r)
-
-    sum_items_out = sum(_to_int(r.items_out, 0) for r in rows)
-    sum_items_on = sum(_to_int(r.items_on_stock, 0) for r in rows)
-    sum_units_used = sum(_to_int(r.units_consumed, 0) for r in rows)
-
-    group_balance_stock = _clamp_nonneg(sum_items_out + sum_items_on)
-    group_previous_month_stock = _clamp_nonneg(group_balance_stock + sum_units_used)
-
-    for r in rows:
-        r.balance_stock = group_balance_stock
-        r.previous_month_stock = group_previous_month_stock
+    # Calculate values independently for each row
+    for row in rows:
+        recalc_row_level_values(row)
+    
     # Caller is responsible for committing
 
 def recalc_all_description_groups():
@@ -94,6 +99,12 @@ def recalc_all_description_groups():
     for desc in descriptions:
         recalc_group_by_description(desc)
     db.session.commit()
+
+def recalc_single_row(row: Consumable):
+    """
+    Convenience function to recalculate values for a single row.
+    """
+    recalc_row_level_values(row)
 
 def consume_from_group(description: str, quantity: int):
     """
@@ -1784,4 +1795,4 @@ def analytics():
                          top_consumed=top_consumed)  # Top 10 most utilized
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host=0.0.0.0, port=5000, debug=True)
