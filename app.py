@@ -1583,7 +1583,7 @@ def edit_consumable(id):
         old_desc = consumable.description
 
         # Convert returnable type to boolean
-        is_returnable = request.form.get('returnable_type') == 'returnable'
+        is_returnable = request.form.get('is_returnable') == 'true'
 
         consumable.balance_stock = _to_int(request.form['balance_stock'])
         consumable.unit = request.form['unit']
