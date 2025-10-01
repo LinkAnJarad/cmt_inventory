@@ -388,6 +388,7 @@ def dashboard():
         return redirect(url_for('login'))
     return render_template('dashboard.html', role=session['role'])
 
+# Update equipment function for bulk borrowing calculation
 @app.route('/equipment')
 def equipment():
     if 'user_id' not in session:
@@ -407,10 +408,10 @@ def equipment():
     if sort not in sortable_fields:
         sort = 'description'
 
-    # Subquery: active borrows per equipment (returned_at IS NULL)
+    # Updated subquery to sum quantities for bulk borrowing
     active_borrows_sq = (db.session.query(
             BorrowLog.equipment_id.label('eq_id'),
-            func.count(BorrowLog.id).label('in_use')
+            func.sum(BorrowLog.quantity_borrowed).label('in_use')  # Sum quantities instead of count
         )
         .filter(BorrowLog.returned_at.is_(None))
         .group_by(BorrowLog.equipment_id)
@@ -904,12 +905,12 @@ def borrow_equipment_row(id):
     
     if request.method == 'POST':
         log = BorrowLog(
-            student_name=request.form['student_name'],
-            student_number=request.form['student_number'],
-            section=request.form['section'],
-            course=request.form['course'],
+            borrower_name=request.form['borrower_name'],
+            borrower_type=request.form['borrower_type'],
+            section_course=request.form['section_course'],
             purpose=request.form['purpose'],
-            equipment_id=equipment.id
+            equipment_id=equipment.id,
+            quantity_borrowed=int(request.form.get('quantity_borrowed', 1))
         )
         db.session.add(log)
         db.session.commit()
@@ -917,7 +918,7 @@ def borrow_equipment_row(id):
     
     return render_template('borrow_equipment_row.html', equipment=equipment)
 
-# Row-level Use Consumable
+# Update use_consumable_row function
 @app.route('/consumables/use/<int:id>', methods=['GET', 'POST'])
 def use_consumable_row(id):
     if session.get('role') not in ['tech', 'admin']:
@@ -929,12 +930,11 @@ def use_consumable_row(id):
         quantity_used = _clamp_nonneg(request.form['quantity'])
 
         if quantity_used > 0:
-            # Log usage
+            # Log usage with new field names
             log = UsageLog(
-                student_name=request.form['student_name'],
-                student_number=request.form['student_number'],
-                section=request.form['section'],
-                course=request.form['course'],
+                user_name=request.form['user_name'],
+                user_type=request.form['user_type'],
+                section_course=request.form['section_course'],
                 purpose=request.form['purpose'],
                 consumable_id=c.id,
                 quantity_used=quantity_used
@@ -1009,6 +1009,7 @@ def return_consumable(usage_id):
     return render_template('return_consumable.html', log=log)
 
 # Return Equipment (mark BorrowLog returned and optionally create a StudentNote)
+# Update return_equipment function
 @app.route('/equipment/return/<int:borrow_id>', methods=['GET', 'POST'])
 def return_equipment(borrow_id):
     if session.get('role') not in ['admin', 'tech']:
@@ -1027,10 +1028,10 @@ def return_equipment(borrow_id):
 
         if note_type and note_type != 'none' and note_description:
             note = StudentNote(
-                student_name=log.student_name,
-                student_number=log.student_number,
-                section=log.section,
-                course=log.course,
+                person_name=log.borrower_name,
+                person_number='',  # No person number in new structure
+                person_type=log.borrower_type,
+                section_course=log.section_course,
                 note_type=note_type,  # 'damaged', 'lost', 'other'
                 description=note_description,
                 equipment_id=log.equipment_id,
@@ -1126,6 +1127,7 @@ def bulk_use_consumables():
     db.session.commit()
     return redirect(url_for('consumables'))
 
+# Update history function
 @app.route('/history')
 def history():
     if session.get('role') not in ['admin', 'tech']:
@@ -1143,8 +1145,8 @@ def history():
     u_dir = request.args.get('u_dir', 'desc').lower()
     u_dir = 'desc' if u_dir == 'desc' else 'asc'
 
-    # BORROWS
-    borrows_sortable = {'student_name', 'student_number', 'section', 'course', 'purpose', 'equipment', 'borrowed_at', 'returned_at'}
+    # BORROWS - Updated field names
+    borrows_sortable = {'borrower_name', 'borrower_type', 'section_course', 'purpose', 'equipment', 'quantity_borrowed', 'borrowed_at', 'returned_at'}
     if b_sort not in borrows_sortable:
         b_sort = 'borrowed_at'
 
@@ -1169,8 +1171,8 @@ def history():
     b_query = b_query.order_by(b_sort_col.desc() if b_dir == 'desc' else b_sort_col.asc())
     borrows = b_query.all()
 
-    # USAGES
-    usages_sortable = {'student_name', 'student_number', 'section', 'course', 'purpose', 'consumable', 'quantity_used', 'used_at'}
+    # USAGES - Updated field names
+    usages_sortable = {'user_name', 'user_type', 'section_course', 'purpose', 'consumable', 'quantity_used', 'used_at'}
     if u_sort not in usages_sortable:
         u_sort = 'used_at'
 
@@ -1532,18 +1534,21 @@ def edit_equipment(id):
     return render_template('edit_equipment.html', equipment=equipment)
 
 # Add Consumable
+# Update add_consumable function
 @app.route('/consumables/add', methods=['GET', 'POST'])
 def add_consumable():
     if session.get('role') not in ['admin', 'tech']:
         return redirect(url_for('dashboard'))
     
     if request.method == 'POST':
+        # Convert returnable type to boolean
+        is_returnable = request.form.get('returnable_type') == 'returnable'
+        
         consumable = Consumable(
             balance_stock=_to_int(request.form['balance_stock']),
             unit=request.form['unit'],
-            test=request.form['test'],
-            total=_to_int(request.form['total']),
             description=request.form['description'],
+            is_returnable=is_returnable,
             expiration=request.form['expiration'],
             lot_number=request.form['lot_number'],
             date_received=request.form['date_received'],
@@ -1566,6 +1571,7 @@ def add_consumable():
     return render_template('add_consumable.html')
 
 # Edit Consumable
+# Update edit_consumable function
 @app.route('/consumables/edit/<int:id>', methods=['GET', 'POST'])
 def edit_consumable(id):
     if session.get('role') not in ['admin', 'tech']:
@@ -1576,11 +1582,13 @@ def edit_consumable(id):
     if request.method == 'POST':
         old_desc = consumable.description
 
+        # Convert returnable type to boolean
+        is_returnable = request.form.get('returnable_type') == 'returnable'
+
         consumable.balance_stock = _to_int(request.form['balance_stock'])
         consumable.unit = request.form['unit']
-        consumable.test = request.form['test']
-        consumable.total = _to_int(request.form['total'])
         consumable.description = request.form['description']
+        consumable.is_returnable = is_returnable
         consumable.expiration = request.form['expiration']
         consumable.lot_number = request.form['lot_number']
         consumable.date_received = request.form['date_received']
@@ -1655,6 +1663,7 @@ def delete_user(id):
     return redirect(url_for('user_management'))
 
 # Add Student Note
+# Update add_student_note function
 @app.route('/notes/add', methods=['GET', 'POST'])
 def add_student_note():
     if session.get('role') not in ['admin', 'tech']:
@@ -1662,10 +1671,10 @@ def add_student_note():
     
     if request.method == 'POST':
         note = StudentNote(
-            student_name=request.form['student_name'],
-            student_number=request.form['student_number'],
-            section=request.form['section'],
-            course=request.form['course'],
+            person_name=request.form['person_name'],
+            person_number=request.form['person_number'],
+            person_type=request.form['person_type'],
+            section_course=request.form['section_course'],
             note_type=request.form['note_type'],
             description=request.form['description'],
             equipment_id=request.form.get('equipment_id') or None,
@@ -1682,6 +1691,7 @@ def add_student_note():
                          equipment=equipment_list, 
                          consumables=consumables_list)
 
+# Update student_notes function
 @app.route('/notes')
 def student_notes():
     if session.get('role') not in ['admin', 'tech']:
@@ -1692,8 +1702,9 @@ def student_notes():
     direction = request.args.get('dir', 'desc').lower()
     direction = 'desc' if direction == 'desc' else 'asc'
 
+    # Updated sortable fields
     sortable_fields = {
-        'student_name', 'student_number', 'section', 'course',
+        'person_name', 'person_type', 'section_course',
         'note_type', 'description', 'related_item', 'reported_by', 'created_at'
     }
     if sort not in sortable_fields:
@@ -1712,10 +1723,9 @@ def student_notes():
     if q:
         like = f"%{q}%"
         query = query.filter(or_(
-            StudentNote.student_name.ilike(like),
-            StudentNote.student_number.ilike(like),
-            StudentNote.section.ilike(like),
-            StudentNote.course.ilike(like),
+            StudentNote.person_name.ilike(like),
+            StudentNote.person_type.ilike(like),
+            StudentNote.section_course.ilike(like),
             StudentNote.note_type.ilike(like),
             StudentNote.description.ilike(like),
             related_item_col.ilike(like),
