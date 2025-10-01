@@ -1542,7 +1542,7 @@ def add_consumable():
     
     if request.method == 'POST':
         # Convert returnable type to boolean
-        is_returnable = request.form.get('returnable_type') == 'returnable'
+        is_returnable = request.form.get('is_returnable') == 'true'
         
         consumable = Consumable(
             balance_stock=_to_int(request.form['balance_stock']),
@@ -1805,4 +1805,4 @@ def analytics():
                          top_consumed=top_consumed)  # Top 10 most utilized
 
 if __name__ == '__main__':
-    app.run(host=0.0.0.0, port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)
