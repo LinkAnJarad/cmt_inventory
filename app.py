@@ -490,7 +490,7 @@ def consumables():
 def export_consumables_pdf():
     """
     Export the current consumables view (respecting q, sort, dir)
-    to a landscape A4 PDF table with proper column sizing.
+    to a landscape A4 PDF table with text wrapping.
     """
     if 'user_id' not in session:
         return redirect(url_for('login'))
@@ -511,9 +511,9 @@ def export_consumables_pdf():
     direction = request.args.get('dir', 'asc').lower()
     direction = 'desc' if direction == 'desc' else 'asc'
 
-    # Same whitelist and filtering as the HTML view
+    # Updated sortable fields (removed test and total, added is_returnable)
     sortable_fields = {
-        'description', 'balance_stock', 'unit', 'test', 'total',
+        'description', 'balance_stock', 'unit', 'is_returnable',
         'expiration', 'lot_number', 'date_received', 'items_out',
         'items_on_stock', 'previous_month_stock', 'units_consumed', 'units_expired'
     }
@@ -526,7 +526,6 @@ def export_consumables_pdf():
         query = query.filter(or_(
             Consumable.description.ilike(like),
             Consumable.unit.ilike(like),
-            Consumable.test.ilike(like),
             Consumable.expiration.ilike(like),
             Consumable.lot_number.ilike(like),
             Consumable.date_received.ilike(like),
@@ -541,22 +540,37 @@ def export_consumables_pdf():
     doc = SimpleDocTemplate(
         buffer,
         pagesize=landscape(A4),
-        leftMargin=0.5*inch, rightMargin=0.5*inch, 
-        topMargin=0.5*inch, bottomMargin=0.5*inch,
+        leftMargin=18, rightMargin=18, topMargin=24, bottomMargin=18,
     )
 
     styles = getSampleStyleSheet()
     
-    # Create custom styles for wrapping text
-    wrap_style = ParagraphStyle(
-        'WrapStyle',
+    # Create custom style for table cells
+    cell_style = ParagraphStyle(
+        'CellStyle',
         parent=styles['Normal'],
-        fontSize=7,
-        leading=8,
+        fontSize=8,
+        leading=10,
         wordWrap='CJK',
-        alignment=0  # left align
+        alignment=0,  # Left alignment
     )
     
+    header_style = ParagraphStyle(
+        'HeaderStyle',
+        parent=styles['Normal'],
+        fontSize=9,
+        leading=11,
+        fontName='Helvetica-Bold',
+        wordWrap='CJK',
+        alignment=0,
+    )
+
+    def create_paragraph(text, is_header=False):
+        """Create a Paragraph object for table cells to enable text wrapping"""
+        if text is None or text == "":
+            return Paragraph("", header_style if is_header else cell_style)
+        return Paragraph(str(text), header_style if is_header else cell_style)
+
     elements = []
 
     title = Paragraph("Consumables Inventory Report", styles["Title"])
@@ -571,73 +585,57 @@ def export_consumables_pdf():
     elements.append(meta)
     elements.append(Spacer(1, 12))
 
+    # Updated headers (removed Test and Total, added Returnable)
     headers = [
-        "Description", "Balance", "Unit", "Test", "Total",
-        "Expiration", "Lot #", "Received", "Out",
-        "In Stock", "Prev Month", "Consumed", "Expired"
+        "Description", "Balance Stock", "Unit", "Returnable",
+        "Expiration", "Lot #", "Date Received", "Items Out",
+        "Items In Stock", "Previous Month Stock", "Units Consumed", "Units Expired"
     ]
 
-    # Calculate column widths for landscape A4 (11.69" - 1" margins = 10.69")
-    page_width = landscape(A4)[0] - inch
-    col_widths = [
-        page_width * 0.20,  # Description - wider
-        page_width * 0.08,  # Balance Stock
-        page_width * 0.06,  # Unit
-        page_width * 0.08,  # Test
-        page_width * 0.06,  # Total
-        page_width * 0.08,  # Expiration
-        page_width * 0.08,  # Lot Number
-        page_width * 0.08,  # Date Received
-        page_width * 0.06,  # Items Out
-        page_width * 0.07,  # Items In Stock
-        page_width * 0.07,  # Previous Month
-        page_width * 0.07,  # Units Consumed
-        page_width * 0.07,  # Units Expired
-    ]
+    def sval(x):
+        return "" if x is None else str(x)
 
-    def format_cell_content(text, max_chars=15):
-        """Format cell content with text wrapping for long content"""
-        if text is None:
-            return ""
-        text_str = str(text)
-        if len(text_str) > max_chars:
-            return Paragraph(text_str, wrap_style)
-        return text_str
+    def returnable_text(is_returnable):
+        return "Yes" if is_returnable else "No"
 
-    data = [headers]
+    # Create header row with Paragraph objects
+    header_row = [create_paragraph(header, is_header=True) for header in headers]
+    data = [header_row]
+    
     for it in items:
         data.append([
-            format_cell_content(it.description, 25),  # Allow longer description
-            format_cell_content(it.balance_stock),
-            format_cell_content(it.unit),
-            format_cell_content(it.test),
-            format_cell_content(it.total),
-            format_cell_content(it.expiration),
-            format_cell_content(it.lot_number),
-            format_cell_content(it.date_received),
-            format_cell_content(it.items_out),
-            format_cell_content(it.items_on_stock),
-            format_cell_content(it.previous_month_stock),
-            format_cell_content(it.units_consumed),
-            format_cell_content(it.units_expired),
+            create_paragraph(sval(it.description)),
+            create_paragraph(sval(it.balance_stock)),
+            create_paragraph(sval(it.unit)),
+            create_paragraph(returnable_text(it.is_returnable)),
+            create_paragraph(sval(it.expiration)),
+            create_paragraph(sval(it.lot_number)),
+            create_paragraph(sval(it.date_received)),
+            create_paragraph(sval(it.items_out)),
+            create_paragraph(sval(it.items_on_stock)),
+            create_paragraph(sval(it.previous_month_stock)),
+            create_paragraph(sval(it.units_consumed)),
+            create_paragraph(sval(it.units_expired)),
         ])
+
+    # Define column widths (in points) - adjust these based on your content needs
+    col_widths = [120, 60, 40, 50, 60, 60, 70, 50, 60, 80, 70, 70]
 
     table = Table(data, repeatRows=1, colWidths=col_widths)
     table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3F4F6")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3F4F6")),  # header bg (gray-100)
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),    # header text (gray-900)
         ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),  # Top alignment for better text wrapping
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, 0), 7),
-        ("FONTSIZE", (0, 1), (-1, -1), 6),
+        ("FONTSIZE", (0, 0), (-1, 0), 9),
+        ("FONTSIZE", (0, 1), (-1, -1), 8),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#FAFAFA")]),
-        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D1D5DB")),
-        ("TOPPADDING", (0, 0), (-1, -1), 2),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D1D5DB")),  # gray-300 grid
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
         ("LEFTPADDING", (0, 0), (-1, -1), 3),
         ("RIGHTPADDING", (0, 0), (-1, -1), 3),
-        ('SPLITBYROW', (0, 0), (-1, -1), True),  # Allow splitting across pages
     ]))
 
     elements.append(table)
@@ -652,12 +650,11 @@ def export_consumables_pdf():
         download_name=filename
     )
 
-
 @app.route('/equipment/export/pdf')
 def export_equipment_pdf():
     """
     Export the current equipment view (respecting q, sort, dir)
-    to a landscape A4 PDF table with proper column sizing.
+    to a landscape A4 PDF table with text wrapping.
     """
     if 'user_id' not in session:
         return redirect(url_for('login'))
@@ -686,10 +683,10 @@ def export_equipment_pdf():
     if sort not in sortable_fields:
         sort = 'description'
 
-    # Subquery for active borrows
+    # Updated subquery to use new BorrowLog structure
     active_borrows_sq = (db.session.query(
             BorrowLog.equipment_id.label('eq_id'),
-            func.count(BorrowLog.id).label('in_use')
+            func.sum(BorrowLog.quantity_borrowed).label('in_use')  # Sum quantities for bulk borrowing
         )
         .filter(BorrowLog.returned_at.is_(None))
         .group_by(BorrowLog.equipment_id)
@@ -728,24 +725,38 @@ def export_equipment_pdf():
     doc = SimpleDocTemplate(
         buffer,
         pagesize=landscape(A4),
-        leftMargin=0.5*inch, rightMargin=0.5*inch, 
-        topMargin=0.5*inch, bottomMargin=0.5*inch,
+        leftMargin=18, rightMargin=18, topMargin=24, bottomMargin=18,
     )
     
     styles = getSampleStyleSheet()
     
-    # Create custom styles for wrapping text
-    wrap_style = ParagraphStyle(
-        'WrapStyle',
+    # Create custom style for table cells
+    cell_style = ParagraphStyle(
+        'CellStyle',
         parent=styles['Normal'],
-        fontSize=7,
-        leading=8,
+        fontSize=8,
+        leading=10,
         wordWrap='CJK',
-        alignment=0
+        alignment=0,  # Left alignment
     )
     
+    header_style = ParagraphStyle(
+        'HeaderStyle',
+        parent=styles['Normal'],
+        fontSize=9,
+        leading=11,
+        fontName='Helvetica-Bold',
+        wordWrap='CJK',
+        alignment=0,
+    )
+
+    def create_paragraph(text, is_header=False):
+        """Create a Paragraph object for table cells to enable text wrapping"""
+        if text is None or text == "":
+            return Paragraph("", header_style if is_header else cell_style)
+        return Paragraph(str(text), header_style if is_header else cell_style)
+
     elements = []
-    
     elements.append(Paragraph("Equipment Inventory Report", styles["Title"]))
     elements.append(Spacer(1, 6))
     elements.append(Paragraph(
@@ -755,69 +766,52 @@ def export_equipment_pdf():
     ))
     elements.append(Spacer(1, 12))
 
-    # Prepare data with shorter headers
+    # Prepare data
     headers = [
-        "Description", "Qty", "In Use", "On Stock", "Purchased",
+        "Description", "Quantity", "In Use", "On Stock", "Date Purchased",
         "Serial #", "Brand", "Model", "Remarks", "Location"
     ]
 
-    # Calculate column widths for 10 columns
-    page_width = landscape(A4)[0] - inch
-    col_widths = [
-        page_width * 0.18,  # Description
-        page_width * 0.06,  # Quantity
-        page_width * 0.07,  # In Use
-        page_width * 0.07,  # On Stock
-        page_width * 0.10,  # Date Purchased
-        page_width * 0.12,  # Serial Number
-        page_width * 0.10,  # Brand
-        page_width * 0.10,  # Model
-        page_width * 0.10,  # Remarks
-        page_width * 0.10,  # Location
-    ]
+    def sval(x):
+        return "" if x is None else str(x)
 
-    def format_cell_content(text, max_chars=15):
-        """Format cell content with text wrapping for long content"""
-        if text is None:
-            return ""
-        text_str = str(text)
-        if len(text_str) > max_chars:
-            return Paragraph(text_str, wrap_style)
-        return text_str
-
-    data = [headers]
+    # Create header row with Paragraph objects
+    header_row = [create_paragraph(header, is_header=True) for header in headers]
+    data = [header_row]
+    
     for e, in_use, on_stock in rows:
         data.append([
-            format_cell_content(e.description, 20),
-            format_cell_content(e.qty),
-            format_cell_content(int(in_use or 0)),
-            format_cell_content(int(on_stock or 0)),
-            format_cell_content(e.date_purchased),
-            format_cell_content(e.serial_number),
-            format_cell_content(e.brand_name),
-            format_cell_content(e.model),
-            format_cell_content(e.remarks, 18),
-            format_cell_content(e.location),
+            create_paragraph(sval(e.description)),
+            create_paragraph(sval(e.qty)),
+            create_paragraph(sval(int(in_use or 0))),
+            create_paragraph(sval(int(on_stock or 0))),
+            create_paragraph(sval(e.date_purchased)),
+            create_paragraph(sval(e.serial_number)),
+            create_paragraph(sval(e.brand_name)),
+            create_paragraph(sval(e.model)),
+            create_paragraph(sval(e.remarks)),
+            create_paragraph(sval(e.location)),
         ])
+
+    # Define column widths (in points) - adjust these based on your content needs
+    col_widths = [140, 50, 40, 50, 80, 80, 80, 80, 120, 80]
 
     table = Table(data, repeatRows=1, colWidths=col_widths)
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3F4F6")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),
         ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),  # Top alignment for better text wrapping
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, 0), 7),
-        ("FONTSIZE", (0, 1), (-1, -1), 6),
+        ("FONTSIZE", (0, 0), (-1, 0), 9),
+        ("FONTSIZE", (0, 1), (-1, -1), 8),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#FAFAFA")]),
         ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D1D5DB")),
-        ("TOPPADDING", (0, 0), (-1, -1), 2),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
         ("LEFTPADDING", (0, 0), (-1, -1), 3),
         ("RIGHTPADDING", (0, 0), (-1, -1), 3),
-        ('SPLITBYROW', (0, 0), (-1, -1), True),
     ]))
-    
     elements.append(table)
     doc.build(elements)
 
@@ -1204,7 +1198,7 @@ def history():
 def export_history_pdf():
     """
     Export the current history view for both sections (borrowing and usage)
-    into a single PDF, respecting all filters and sorts with proper column sizing.
+    into a single PDF with text wrapping, respecting all filters and sorts.
     """
     if session.get('role') not in ['admin', 'tech']:
         return redirect(url_for('dashboard'))
@@ -1231,8 +1225,11 @@ def export_history_pdf():
     u_dir = request.args.get('u_dir', 'desc').lower()
     u_dir = 'desc' if u_dir == 'desc' else 'asc'
 
-    # Build borrows query (match /history)
-    borrows_sortable = {'student_name', 'student_number', 'section', 'course', 'purpose', 'equipment', 'borrowed_at', 'returned_at'}
+    # Build borrows query (updated field names)
+    borrows_sortable = {
+        'borrower_name', 'borrower_type', 'section_course', 'purpose', 
+        'equipment', 'quantity_borrowed', 'borrowed_at', 'returned_at'
+    }
     if b_sort not in borrows_sortable:
         b_sort = 'borrowed_at'
 
@@ -1241,10 +1238,9 @@ def export_history_pdf():
     if b_q:
         like = f"%{b_q}%"
         b_query = b_query.filter(or_(
-            BorrowLog.student_name.ilike(like),
-            BorrowLog.student_number.ilike(like),
-            BorrowLog.section.ilike(like),
-            BorrowLog.course.ilike(like),
+            BorrowLog.borrower_name.ilike(like),
+            BorrowLog.borrower_type.ilike(like),
+            BorrowLog.section_course.ilike(like),
             BorrowLog.purpose.ilike(like),
             Equipment.description.ilike(like),
         ))
@@ -1257,8 +1253,11 @@ def export_history_pdf():
     b_query = b_query.order_by(b_sort_col.desc() if b_dir == 'desc' else b_sort_col.asc())
     borrows = b_query.all()
 
-    # Build usages query (match /history)
-    usages_sortable = {'student_name', 'student_number', 'section', 'course', 'purpose', 'consumable', 'quantity_used', 'used_at'}
+    # Build usages query (updated field names)
+    usages_sortable = {
+        'user_name', 'user_type', 'section_course', 'purpose', 
+        'consumable', 'quantity_used', 'used_at'
+    }
     if u_sort not in usages_sortable:
         u_sort = 'used_at'
 
@@ -1267,10 +1266,9 @@ def export_history_pdf():
     if u_q:
         like = f"%{u_q}%"
         u_query = u_query.filter(or_(
-            UsageLog.student_name.ilike(like),
-            UsageLog.student_number.ilike(like),
-            UsageLog.section.ilike(like),
-            UsageLog.course.ilike(like),
+            UsageLog.user_name.ilike(like),
+            UsageLog.user_type.ilike(like),
+            UsageLog.section_course.ilike(like),
             UsageLog.purpose.ilike(like),
             Consumable.description.ilike(like),
         ))
@@ -1288,22 +1286,37 @@ def export_history_pdf():
     doc = SimpleDocTemplate(
         buffer,
         pagesize=landscape(A4),
-        leftMargin=0.5*inch, rightMargin=0.5*inch, 
-        topMargin=0.5*inch, bottomMargin=0.5*inch,
+        leftMargin=18, rightMargin=18, topMargin=24, bottomMargin=18,
     )
     
     styles = getSampleStyleSheet()
     
-    # Create custom styles for wrapping text
-    wrap_style = ParagraphStyle(
-        'WrapStyle',
+    # Create custom style for table cells
+    cell_style = ParagraphStyle(
+        'CellStyle',
         parent=styles['Normal'],
-        fontSize=7,
-        leading=8,
+        fontSize=8,
+        leading=10,
         wordWrap='CJK',
-        alignment=0
+        alignment=0,  # Left alignment
     )
     
+    header_style = ParagraphStyle(
+        'HeaderStyle',
+        parent=styles['Normal'],
+        fontSize=9,
+        leading=11,
+        fontName='Helvetica-Bold',
+        wordWrap='CJK',
+        alignment=0,
+    )
+
+    def create_paragraph(text, is_header=False):
+        """Create a Paragraph object for table cells to enable text wrapping"""
+        if text is None or text == "":
+            return Paragraph("", header_style if is_header else cell_style)
+        return Paragraph(str(text), header_style if is_header else cell_style)
+
     elements = []
 
     # Title/meta
@@ -1315,66 +1328,53 @@ def export_history_pdf():
     ))
     elements.append(Spacer(1, 12))
 
-    # Calculate column widths for 8 columns
-    page_width = landscape(A4)[0] - inch
-    col_widths = [
-        page_width * 0.15,  # Student
-        page_width * 0.10,  # Student #
-        page_width * 0.10,  # Section
-        page_width * 0.12,  # Course
-        page_width * 0.18,  # Purpose
-        page_width * 0.18,  # Equipment/Consumable
-        page_width * 0.08,  # Quantity/Status
-        page_width * 0.09,  # Date
-    ]
-
-    def format_cell_content(text, max_chars=15):
-        """Format cell content with text wrapping for long content"""
-        if text is None:
-            return ""
-        text_str = str(text)
-        if len(text_str) > max_chars:
-            return Paragraph(text_str, wrap_style)
-        return text_str
-
     # Borrowing section
     elements.append(Paragraph("Equipment Borrowing", styles["Heading2"]))
     elements.append(Spacer(1, 6))
+    
+    # Updated headers for borrowing
     borrow_headers = [
-        "Student", "Student #", "Section", "Course",
-        "Purpose", "Equipment", "Status", "Borrowed At"
+        "Borrower", "Type", "Section + Course", "Purpose", 
+        "Equipment", "Quantity", "Borrowed At", "Returned At"
     ]
 
-    borrow_data = [borrow_headers]
+    def sval(x):
+        return "" if x is None else str(x)
+
+    # Create header row with Paragraph objects
+    borrow_header_row = [create_paragraph(header, is_header=True) for header in borrow_headers]
+    borrow_data = [borrow_header_row]
+    
     for log in borrows:
-        status = "Returned" if log.returned_at else "Active"
         borrow_data.append([
-            format_cell_content(log.student_name),
-            format_cell_content(log.student_number),
-            format_cell_content(log.section),
-            format_cell_content(log.course),
-            format_cell_content(log.purpose, 20),
-            format_cell_content(log.equipment.description if log.equipment else "—", 20),
-            format_cell_content(status),
-            format_cell_content(log.borrowed_at),
+            create_paragraph(sval(log.borrower_name)),
+            create_paragraph(sval(log.borrower_type.title() if log.borrower_type else "")),
+            create_paragraph(sval(log.section_course)),
+            create_paragraph(sval(log.purpose)),
+            create_paragraph(sval(log.equipment.description if log.equipment else "—")),
+            create_paragraph(sval(log.quantity_borrowed)),
+            create_paragraph(sval(log.borrowed_at)),
+            create_paragraph(sval(log.returned_at if log.returned_at else "—")),
         ])
 
-    borrow_table = Table(borrow_data, repeatRows=1, colWidths=col_widths)
+    # Define column widths for borrowing table
+    borrow_col_widths = [120, 60, 100, 140, 120, 50, 100, 100]
+
+    borrow_table = Table(borrow_data, repeatRows=1, colWidths=borrow_col_widths)
     borrow_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3F4F6")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),
         ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),  # Top alignment for better text wrapping
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, 0), 7),
-        ("FONTSIZE", (0, 1), (-1, -1), 6),
+        ("FONTSIZE", (0, 0), (-1, 0), 9),
+        ("FONTSIZE", (0, 1), (-1, -1), 8),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#FAFAFA")]),
         ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D1D5DB")),
-        ("TOPPADDING", (0, 0), (-1, -1), 2),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
         ("LEFTPADDING", (0, 0), (-1, -1), 3),
         ("RIGHTPADDING", (0, 0), (-1, -1), 3),
-        ('SPLITBYROW', (0, 0), (-1, -1), True),
     ]))
     elements.append(borrow_table)
 
@@ -1384,39 +1384,50 @@ def export_history_pdf():
     # Usage section
     elements.append(Paragraph("Consumables Usage", styles["Heading2"]))
     elements.append(Spacer(1, 6))
+    
+    # Updated headers for usage
     usage_headers = [
-        "Student", "Student #", "Section", "Course",
-        "Purpose", "Consumable", "Qty Used", "Used At"
+        "User", "Type", "Section + Course", "Purpose",
+        "Consumable", "Returnable", "Quantity Used", "Used At"
     ]
-    usage_data = [usage_headers]
+    
+    # Create header row with Paragraph objects
+    usage_header_row = [create_paragraph(header, is_header=True) for header in usage_headers]
+    usage_data = [usage_header_row]
+    
     for log in usages:
+        # Check if consumable is returnable
+        returnable_text = "Yes" if (log.consumable and log.consumable.is_returnable) else "No"
+        
         usage_data.append([
-            format_cell_content(log.student_name),
-            format_cell_content(log.student_number),
-            format_cell_content(log.section),
-            format_cell_content(log.course),
-            format_cell_content(log.purpose, 20),
-            format_cell_content(log.consumable.description if log.consumable else "—", 20),
-            format_cell_content(log.quantity_used),
-            format_cell_content(log.used_at),
+            create_paragraph(sval(log.user_name)),
+            create_paragraph(sval(log.user_type.title() if log.user_type else "")),
+            create_paragraph(sval(log.section_course)),
+            create_paragraph(sval(log.purpose)),
+            create_paragraph(sval(log.consumable.description if log.consumable else "—")),
+            create_paragraph(returnable_text),
+            create_paragraph(sval(log.quantity_used)),
+            create_paragraph(sval(log.used_at)),
         ])
 
-    usage_table = Table(usage_data, repeatRows=1, colWidths=col_widths)
+    # Define column widths for usage table
+    usage_col_widths = [120, 60, 100, 140, 120, 60, 70, 100]
+
+    usage_table = Table(usage_data, repeatRows=1, colWidths=usage_col_widths)
     usage_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3F4F6")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),
         ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),  # Top alignment for better text wrapping
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, 0), 7),
-        ("FONTSIZE", (0, 1), (-1, -1), 6),
+        ("FONTSIZE", (0, 0), (-1, 0), 9),
+        ("FONTSIZE", (0, 1), (-1, -1), 8),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#FAFAFA")]),
         ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D1D5DB")),
-        ("TOPPADDING", (0, 0), (-1, -1), 2),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
         ("LEFTPADDING", (0, 0), (-1, -1), 3),
         ("RIGHTPADDING", (0, 0), (-1, -1), 3),
-        ('SPLITBYROW', (0, 0), (-1, -1), True),
     ]))
     elements.append(usage_table)
 
