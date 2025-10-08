@@ -111,7 +111,7 @@
                               class="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500">
                         <option value="">Choose equipment</option>
                         {% for item in equipment %}
-                          <option value="{{ item.id }}">{{ item.description }}</option>
+                          <option value="{{ item.id }}">ID: {{ item.id }} {{ item.description }}</option>
                         {% endfor %}
                       </select>
                     </div>
@@ -174,7 +174,7 @@
               </div>
               <h2 class="text-lg font-semibold text-gray-800">Bulk Consumable Usage</h2>
             </div>
-            <span class="text-xs text-gray-500 bg-white px-2 py-1 rounded-full">Track multiple consumable usage</span>
+            <span class="text-xs text-gray-500 bg-white px-2 py-1 rounded-full">Track multiple consumable usage by specific ID</span>
           </div>
         </div>
 
@@ -224,32 +224,59 @@
             <div class="space-y-6">
               <div class="border-l-4 border-orange-500 pl-4">
                 <h3 class="text-lg font-medium text-gray-900 mb-4">Consumables Selection</h3>
+                <p class="text-sm text-gray-600">Select specific consumable items by their unique ID. Each item shows lot number, expiration date, and available stock.</p>
               </div>
               
               <div id="consumables-list" class="space-y-4">
                 <div class="consumable-item bg-gray-50 p-4 rounded-lg border border-gray-200">
-                  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div class="md:col-span-2">
-                      <label class="block text-sm font-medium text-gray-700 mb-2">Consumable</label>
-                      <select name="consumable_ids[]" required
-                              class="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                        <option value="">Choose consumable</option>
+                  <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+                    <div class="lg:col-span-2">
+                      <label class="block text-sm font-medium text-gray-700 mb-2">Consumable Item</label>
+                      <select name="consumable_ids[]" required onchange="updateConsumableInfo(this)"
+                              class="consumable-select block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        <option value="">Choose specific consumable item</option>
                         {% for item in consumables %}
-                          <option value="{{ item.id }}">{{ item.description }} ({{ item.unit }})</option>
+                          <option value="{{ item.id }}" 
+                                  data-description="{{ item.description }}"
+                                  data-lot="{{ item.lot_number }}"
+                                  data-expiration="{{ item.expiration }}"
+                                  data-available="{{ item.items_out }}"
+                                  data-unit="{{ item.unit }}">
+                            ID: {{ item.id }} - {{ item.description }} (Lot: {{ item.lot_number }}, Exp: {{ item.expiration }})
+                          </option>
                         {% endfor %}
                       </select>
                     </div>
                     <div>
                       <label class="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
-                      <div class="flex items-center space-x-2">
-                        <input type="number" name="quantities[]" min="1" value="1" required
-                               class="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                        <button type="button" onclick="removeConsumableItem(this)" 
-                                class="text-red-600 hover:text-red-800 p-2 rounded-lg hover:bg-red-50 transition-colors">
-                          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                          </svg>
-                        </button>
+                      <input type="number" name="quantities[]" min="1" value="1" required
+                             class="quantity-input block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div class="flex items-end">
+                      <button type="button" onclick="removeConsumableItem(this)" 
+                              class="w-full text-red-600 hover:text-red-800 p-2 rounded-lg hover:bg-red-50 transition-colors border border-red-200 hover:border-red-300">
+                        <svg class="h-4 w-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                  <!-- Item Info Display -->
+                  <div class="item-info hidden mt-3">
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div class="flex items-start">
+                        <svg class="h-4 w-4 text-blue-500 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <div class="text-xs space-y-1">
+                          <p class="font-medium text-blue-900">Selected Item Details:</p>
+                          <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            <p class="text-blue-700"><span class="font-medium">Lot:</span> <span class="info-lot"></span></p>
+                            <p class="text-blue-700"><span class="font-medium">Exp:</span> <span class="info-exp"></span></p>
+                            <p class="text-blue-700"><span class="font-medium">Available:</span> <span class="info-available"></span> <span class="info-unit"></span></p>
+                            <p class="text-blue-700"><span class="font-medium">ID:</span> <span class="info-id"></span></p>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -349,33 +376,88 @@
     }
   }
 
+  function updateConsumableInfo(selectElement) {
+    const selectedOption = selectElement.options[selectElement.selectedIndex];
+    const itemDiv = selectElement.closest('.consumable-item');
+    const infoDiv = itemDiv.querySelector('.item-info');
+    const quantityInput = itemDiv.querySelector('.quantity-input');
+    
+    if (selectedOption.value) {
+      const lot = selectedOption.dataset.lot || 'N/A';
+      const expiration = selectedOption.dataset.expiration || 'N/A';
+      const available = selectedOption.dataset.available || '0';
+      const unit = selectedOption.dataset.unit || '';
+      const id = selectedOption.value;
+      
+      itemDiv.querySelector('.info-lot').textContent = lot;
+      itemDiv.querySelector('.info-exp').textContent = expiration;
+      itemDiv.querySelector('.info-available').textContent = available;
+      itemDiv.querySelector('.info-unit').textContent = unit;
+      itemDiv.querySelector('.info-id').textContent = id;
+      
+      infoDiv.classList.remove('hidden');
+      
+      // Set max quantity based on available stock
+      quantityInput.setAttribute('max', available);
+    } else {
+      infoDiv.classList.add('hidden');
+      quantityInput.removeAttribute('max');
+    }
+  }
+
   function addConsumableItem() {
     const consumablesList = document.getElementById('consumables-list');
     const newItem = document.createElement('div');
     newItem.className = 'consumable-item bg-gray-50 p-4 rounded-lg border border-gray-200';
     newItem.innerHTML = `
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div class="md:col-span-2">
-          <label class="block text-sm font-medium text-gray-700 mb-2">Consumable</label>
-          <select name="consumable_ids[]" required
-                  class="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-            <option value="">Choose consumable</option>
+      <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        <div class="lg:col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-2">Consumable Item</label>
+          <select name="consumable_ids[]" required onchange="updateConsumableInfo(this)"
+                  class="consumable-select block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+            <option value="">Choose specific consumable item</option>
             {% for item in consumables %}
-              <option value="{{ item.id }}">{{ item.description }} ({{ item.unit }})</option>
+              <option value="{{ item.id }}" 
+                      data-description="{{ item.description }}"
+                      data-lot="{{ item.lot_number }}"
+                      data-expiration="{{ item.expiration }}"
+                      data-available="{{ item.items_out }}"
+                      data-unit="{{ item.unit }}">
+                ID: {{ item.id }} - {{ item.description }} (Lot: {{ item.lot_number }}, Exp: {{ item.expiration }})
+              </option>
             {% endfor %}
           </select>
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
-          <div class="flex items-center space-x-2">
-            <input type="number" name="quantities[]" min="1" value="1" required
-                   class="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-            <button type="button" onclick="removeConsumableItem(this)" 
-                    class="text-red-600 hover:text-red-800 p-2 rounded-lg hover:bg-red-50 transition-colors">
-              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-              </svg>
-            </button>
+          <input type="number" name="quantities[]" min="1" value="1" required
+                 class="quantity-input block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+        </div>
+        <div class="flex items-end">
+          <button type="button" onclick="removeConsumableItem(this)" 
+                  class="w-full text-red-600 hover:text-red-800 p-2 rounded-lg hover:bg-red-50 transition-colors border border-red-200 hover:border-red-300">
+            <svg class="h-4 w-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <!-- Item Info Display -->
+      <div class="item-info hidden mt-3">
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <div class="flex items-start">
+            <svg class="h-4 w-4 text-blue-500 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <div class="text-xs space-y-1">
+              <p class="font-medium text-blue-900">Selected Item Details:</p>
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <p class="text-blue-700"><span class="font-medium">Lot:</span> <span class="info-lot"></span></p>
+                <p class="text-blue-700"><span class="font-medium">Exp:</span> <span class="info-exp"></span></p>
+                <p class="text-blue-700"><span class="font-medium">Available:</span> <span class="info-available"></span> <span class="info-unit"></span></p>
+                <p class="text-blue-700"><span class="font-medium">ID:</span> <span class="info-id"></span></p>
+              </div>
+            </div>
           </div>
         </div>
       </div>

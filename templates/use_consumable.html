@@ -133,17 +133,40 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
                       </svg>
                     </div>
-                    <select name="consumable_id" required
+                    <select name="consumable_id" id="consumable_select" required onchange="updateConsumableInfo()"
                             class="block w-full pl-10 pr-8 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 bg-gray-50 focus:bg-white appearance-none">
                       <option value="">Choose a consumable item</option>
                       {% for item in consumables %}
-                        <option value="{{ item.id }}">{{ item.description }}</option>
+                        <option value="{{ item.id }}" 
+                                data-description="{{ item.description }}"
+                                data-lot="{{ item.lot_number }}"
+                                data-expiration="{{ item.expiration }}"
+                                data-available="{{ item.items_out }}"
+                                data-unit="{{ item.unit }}">
+                          ID: {{ item.id }} - {{ item.description }} (Lot: {{ item.lot_number }}, Exp: {{ item.expiration }})
+                        </option>
                       {% endfor %}
                     </select>
                     <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
                       <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                       </svg>
+                    </div>
+                  </div>
+                  <!-- Consumable Info Display -->
+                  <div id="consumable_info" class="mt-3 hidden">
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
+                      <div class="flex items-start">
+                        <svg class="h-5 w-5 text-blue-500 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <div class="text-sm space-y-1">
+                          <p class="font-medium text-blue-900">Selected Item Details:</p>
+                          <p class="text-blue-700"><span class="font-medium">Lot #:</span> <span id="info_lot"></span></p>
+                          <p class="text-blue-700"><span class="font-medium">Expiration:</span> <span id="info_exp"></span></p>
+                          <p class="text-blue-700"><span class="font-medium">Available:</span> <span id="info_available"></span> <span id="info_unit"></span></p>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -158,10 +181,11 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/>
                       </svg>
                     </div>
-                    <input type="number" name="quantity" min="0" required
+                    <input type="number" name="quantity" id="quantity_input" min="0" required
                            placeholder="Enter quantity needed"
                            class="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 bg-gray-50 focus:bg-white">
                   </div>
+                  <p class="mt-2 text-xs text-gray-500">Enter the quantity you need to use from this specific item</p>
                 </div>
               </div>
             </div>
@@ -221,4 +245,33 @@
     box-shadow: 0 10px 25px rgba(34, 197, 94, 0.3);
   }
 </style>
+
+<!-- JavaScript for dynamic consumable info display -->
+<script>
+  function updateConsumableInfo() {
+    const select = document.getElementById('consumable_select');
+    const selectedOption = select.options[select.selectedIndex];
+    const infoDiv = document.getElementById('consumable_info');
+    
+    if (selectedOption.value) {
+      const lot = selectedOption.dataset.lot || 'N/A';
+      const expiration = selectedOption.dataset.expiration || 'N/A';
+      const available = selectedOption.dataset.available || '0';
+      const unit = selectedOption.dataset.unit || '';
+      
+      document.getElementById('info_lot').textContent = lot;
+      document.getElementById('info_exp').textContent = expiration;
+      document.getElementById('info_available').textContent = available;
+      document.getElementById('info_unit').textContent = unit;
+      
+      infoDiv.classList.remove('hidden');
+      
+      // Set max quantity based on available stock
+      const quantityInput = document.getElementById('quantity_input');
+      quantityInput.setAttribute('max', available);
+    } else {
+      infoDiv.classList.add('hidden');
+    }
+  }
+</script>
 {% endblock %}

@@ -62,7 +62,7 @@ def recalc_row_level_values(row: Consumable):
     """
     Calculate row-level values:
       balance_stock = items_out + items_on_stock
-      previous_month_stock = balance_stock + units_consumed
+      previous_month_stock = items_out + items_on_stock + units_consumed
     """
     # Normalize row-level nonnegatives first
     normalize_row_nonnegatives(row)
@@ -70,35 +70,18 @@ def recalc_row_level_values(row: Consumable):
     # Calculate balance_stock for this specific row
     row_balance_stock = _clamp_nonneg(_to_int(row.items_out, 0) + _to_int(row.items_on_stock, 0))
     
-    # Calculate previous_month_stock for this specific row
-    row_previous_month_stock = _clamp_nonneg(row_balance_stock + _to_int(row.units_consumed, 0))
+    # Calculate previous_month_stock: items_out + items_on_stock + units_consumed
+    row_previous_month_stock = _clamp_nonneg(
+        _to_int(row.items_out, 0) + 
+        _to_int(row.items_on_stock, 0) + 
+        _to_int(row.units_consumed, 0)
+    )
     
     # Assign the calculated values to the row
     row.balance_stock = row_balance_stock
     row.previous_month_stock = row_previous_month_stock
 
-def recalc_group_by_description(description: str):
-    """
-    Calculate row-level balance_stock and previous_month_stock for each row
-    with the given description independently.
-    """
-    if not description:
-        return
-    rows = Consumable.query.filter(Consumable.description == description).all()
-    if not rows:
-        return
 
-    # Calculate values independently for each row
-    for row in rows:
-        recalc_row_level_values(row)
-    
-    # Caller is responsible for committing
-
-def recalc_all_description_groups():
-    descriptions = [d[0] for d in db.session.query(Consumable.description).distinct().all()]
-    for desc in descriptions:
-        recalc_group_by_description(desc)
-    db.session.commit()
 
 def recalc_single_row(row: Consumable):
     """
@@ -106,36 +89,70 @@ def recalc_single_row(row: Consumable):
     """
     recalc_row_level_values(row)
 
-def consume_from_group(description: str, quantity: int):
+# def consume_from_group(description: str, quantity: int):
+#     """
+#     Reduce items_out (lab stock) across the group FIFO by expiration date.
+#     Returns the remaining quantity that could not be fulfilled (0 if fully applied).
+#     """
+#     remaining = _clamp_nonneg(quantity)
+#     if remaining == 0:
+#         return 0
+
+#     rows = (Consumable.query
+#             .filter(Consumable.description == description)
+#             .all())
+#     # Sort rows by expiration heuristic (soonest usable first)
+#     rows.sort(key=lambda r: _expiration_sort_key(r.expiration))
+
+#     for r in rows:
+#         out = _clamp_nonneg(r.items_out)
+#         if out <= 0:
+#             continue
+#         take = min(out, remaining)
+#         r.items_out = out - take
+#         remaining -= take
+#         if remaining == 0:
+#             break
+#     return remaining
+
+def consume_from_single_consumable(consumable_id: int, quantity: int):
     """
-    Reduce items_on_stock across the group FIFO by expiration date.
+    Reduce items_out (lab stock) from a specific consumable by id.
     Returns the remaining quantity that could not be fulfilled (0 if fully applied).
     """
     remaining = _clamp_nonneg(quantity)
     if remaining == 0:
         return 0
 
-    rows = (Consumable.query
-            .filter(Consumable.description == description)
-            .all())
-    # Sort rows by expiration heuristic (soonest usable first)
-    rows.sort(key=lambda r: _expiration_sort_key(r.expiration))
-
-    for r in rows:
-        on = _clamp_nonneg(r.items_on_stock)
-        if on <= 0:
-            continue
-        take = min(on, remaining)
-        r.items_on_stock = on - take
-        remaining -= take
-        if remaining == 0:
-            break
+    c = Consumable.query.get(consumable_id)
+    if not c:
+        return remaining
+    
+    out = _clamp_nonneg(c.items_out)
+    if out <= 0:
+        return remaining
+    
+    take = min(out, remaining)
+    c.items_out = out - take
+    remaining -= take
+    
     return remaining
 
 # Ensure DB + default admin user exist and seed
 with app.app_context():
     os.makedirs(os.path.join(basedir, "instance"), exist_ok=True)
     db.create_all()
+
+    # ADD: Update existing records to have default status
+    try:
+        # Check if status column exists, if not it will be created by create_all()
+        existing_notes = StudentNote.query.filter(StudentNote.status.is_(None)).all()
+        for note in existing_notes:
+            note.status = 'pending'
+        db.session.commit()
+    except:
+        # Column might not exist yet, will be created by create_all()
+        pass
 
     # Sample data for equipment
     equipment_data = [
@@ -357,8 +374,10 @@ with app.app_context():
 
     db.session.commit()
 
-    # After seeding, enforce group-level constraints across all descriptions
-    recalc_all_description_groups()
+    # After seeding, recalculate individual row values
+    for consumable in Consumable.query.all():
+        recalc_single_row(consumable)
+    db.session.commit()
 
 @app.route('/')
 def index():
@@ -870,9 +889,8 @@ def use_consumable():
             return redirect(url_for('consumables'))
 
         c = Consumable.query.get_or_404(consumable_id)
-        description = c.description or ""
 
-        # Log usage with new field names
+        # Log usage
         log = UsageLog(
             user_name=request.form['user_name'],
             user_type=request.form['user_type'],
@@ -883,10 +901,14 @@ def use_consumable():
         )
         db.session.add(log)
 
-        # Rest of the logic remains the same...
+        # Increment units_consumed for this specific row
         c.units_consumed = _to_int(c.units_consumed, 0) + quantity_used
-        remaining = consume_from_group(description, quantity_used)
-        recalc_group_by_description(description)
+        
+        # Reduce items_out (lab stock) by ID
+        remaining = consume_by_id(consumable_id, quantity_used)
+        
+        # Recalculate this specific row
+        recalc_single_row(c)
 
         db.session.commit()
         return redirect(url_for('consumables'))
@@ -918,7 +940,29 @@ def borrow_equipment_row(id):
     
     return render_template('borrow_equipment_row.html', equipment=equipment)
 
-# Update use_consumable_row function
+def consume_by_id(consumable_id: int, quantity: int):
+    """
+    Reduce items_out (lab stock) for a specific consumable by its ID.
+    Returns the remaining quantity that could not be fulfilled (0 if fully applied).
+    """
+    remaining = _clamp_nonneg(quantity)
+    if remaining == 0:
+        return 0
+
+    c = Consumable.query.get(consumable_id)
+    if not c:
+        return remaining
+    
+    out = _clamp_nonneg(c.items_out)
+    if out <= 0:
+        return remaining
+    
+    take = min(out, remaining)
+    c.items_out = out - take
+    remaining -= take
+    
+    return remaining
+
 @app.route('/consumables/use/<int:id>', methods=['GET', 'POST'])
 def use_consumable_row(id):
     if session.get('role') not in ['tech', 'admin']:
@@ -930,7 +974,7 @@ def use_consumable_row(id):
         quantity_used = _clamp_nonneg(request.form['quantity'])
 
         if quantity_used > 0:
-            # Log usage with new field names
+            # Log usage
             log = UsageLog(
                 user_name=request.form['user_name'],
                 user_type=request.form['user_type'],
@@ -944,12 +988,11 @@ def use_consumable_row(id):
             # Add units consumed on this row
             c.units_consumed = _to_int(c.units_consumed, 0) + quantity_used
 
-            # Reduce items_on_stock from the group FIFO
-            description = c.description or ""
-            consume_from_group(description, quantity_used)
+            # Reduce items_out (lab stock) by ID
+            consume_by_id(c.id, quantity_used)
 
-            # Recalc description group to enforce constraints
-            recalc_group_by_description(description)
+            # Recalc this specific row
+            recalc_single_row(c)
 
             db.session.commit()
         return redirect(url_for('consumables'))
@@ -977,7 +1020,7 @@ def return_consumable(usage_id):
             
             # Add the returned quantity back to stock
             if quantity_returned > 0:
-                log.consumable.items_on_stock = _to_int(log.consumable.items_on_stock, 0) + quantity_returned
+                log.consumable.items_out = _to_int(log.consumable.items_out, 0) + quantity_returned
                 
                 # Store the returned quantity for tracking
                 log.quantity_returned = quantity_returned
@@ -989,7 +1032,7 @@ def return_consumable(usage_id):
             if note_type and note_type != 'none' and note_description:
                 note = StudentNote(
                     person_name=log.user_name,
-                    person_number=log.user_type,  # or appropriate ID field
+                    person_number=log.user_type,
                     person_type=log.user_type,
                     section_course=log.section_course,
                     note_type=note_type,
@@ -1000,8 +1043,8 @@ def return_consumable(usage_id):
                 )
                 db.session.add(note)
             
-            # Recalculate group constraints
-            recalc_group_by_description(log.consumable.description)
+            # Recalculate this single row
+            recalc_single_row(log.consumable)
         
         db.session.commit()
         return redirect(url_for('history'))
@@ -1118,11 +1161,14 @@ def bulk_use_consumables():
                     )
                     db.session.add(log)
 
-                    # Update consumable stock
+                    # Increment units_consumed
                     c.units_consumed = _to_int(c.units_consumed, 0) + quantity_used
-                    description = c.description or ""
-                    remaining = consume_from_group(description, quantity_used)
-                    recalc_group_by_description(description)
+                    
+                    # Consume by ID
+                    consume_by_id(int(consumable_id), quantity_used)
+                    
+                    # Recalc this specific row
+                    recalc_single_row(c)
     
     db.session.commit()
     return redirect(url_for('consumables'))
@@ -1560,10 +1606,10 @@ def add_consumable():
         )
         normalize_row_nonnegatives(consumable)
         db.session.add(consumable)
-        db.session.flush()  # ensure consumable has an id
+        db.session.flush()
 
-        # Enforce description-level constraints
-        recalc_group_by_description(consumable.description)
+        # Recalculate this single row
+        recalc_single_row(consumable)
 
         db.session.commit()
         return redirect(url_for('consumables'))
@@ -1580,8 +1626,6 @@ def edit_consumable(id):
     consumable = Consumable.query.get_or_404(id)
     
     if request.method == 'POST':
-        old_desc = consumable.description
-
         # Convert returnable type to boolean
         is_returnable = request.form.get('is_returnable') == 'true'
 
@@ -1599,11 +1643,9 @@ def edit_consumable(id):
         consumable.units_expired = _to_int(request.form.get('units_expired'), None) if request.form.get('units_expired') else None
 
         normalize_row_nonnegatives(consumable)
-
-        # Recalc for both old and new description if changed
-        if (old_desc or "") != (consumable.description or ""):
-            recalc_group_by_description(old_desc)
-        recalc_group_by_description(consumable.description)
+        
+        # Recalc this single row
+        recalc_single_row(consumable)
 
         db.session.commit()
         return redirect(url_for('consumables'))
@@ -1617,16 +1659,12 @@ def delete_consumable(id):
         return redirect(url_for('dashboard'))
     
     consumable = Consumable.query.get_or_404(id)
-    desc = consumable.description  # keep for optional group recalculation
 
-    # Clean up dependent rows to avoid FK issues (if constraints are enforced)
+    # Clean up dependent rows to avoid FK issues
     UsageLog.query.filter_by(consumable_id=consumable.id).delete(synchronize_session=False)
     StudentNote.query.filter_by(consumable_id=consumable.id).delete(synchronize_session=False)
 
     db.session.delete(consumable)
-    db.session.commit()
-
-    recalc_group_by_description(desc)
     db.session.commit()
 
     return redirect(url_for('consumables'))
@@ -1679,7 +1717,8 @@ def add_student_note():
             description=request.form['description'],
             equipment_id=request.form.get('equipment_id') or None,
             consumable_id=request.form.get('consumable_id') or None,
-            created_by=session['user_id']
+            created_by=session['user_id'],
+            status='pending'  # ADD: explicitly set default status
         )
         db.session.add(note)
         db.session.commit()
@@ -1701,24 +1740,51 @@ def student_notes():
     sort = request.args.get('sort', 'created_at')
     direction = request.args.get('dir', 'desc').lower()
     direction = 'desc' if direction == 'desc' else 'asc'
+    
+    # Filter by status
+    status_filter = request.args.get('status', 'all')
 
-    # Updated sortable fields
+    # Updated sortable fields - ADD status
     sortable_fields = {
         'person_name', 'person_type', 'section_course',
-        'note_type', 'description', 'related_item', 'reported_by', 'created_at'
+        'note_type', 'description', 'related_item', 'reported_by', 'created_at', 'status'
     }
     if sort not in sortable_fields:
         sort = 'created_at'
 
+    # DEBUG: Check basic counts
+    total_notes = StudentNote.query.count()
+    total_users = User.query.count()
+    print(f"Total notes: {total_notes}")
+    print(f"Total users: {total_users}")
+    
+    # DEBUG: Check if users referenced by notes exist
+    all_notes = StudentNote.query.all()
+    for note in all_notes:
+        user = User.query.get(note.created_by)
+        print(f"Note {note.id}: created_by={note.created_by}, user exists: {user is not None}")
+        if user:
+            print(f"  User: {user.username}")
+
     # Build query with joins for related item and reporter
+    # CHANGE: Use outerjoin instead of join for User to avoid filtering out notes
     query = (StudentNote.query
              .outerjoin(Equipment, StudentNote.equipment_id == Equipment.id)
              .outerjoin(Consumable, StudentNote.consumable_id == Consumable.id)
-             .join(User, StudentNote.created_by == User.id))
+             .outerjoin(User, StudentNote.created_by == User.id))
+    
+    # DEBUG: Check count after joins
+    notes_after_joins = query.count()
+    print(f"Notes after joins: {notes_after_joins}")
 
     # COALESCE to pick the related item's description (equipment first, else consumable)
     related_item_col = func.coalesce(Equipment.description, Consumable.description)
     reported_by_col = User.username
+
+    # ADD status filter
+    if status_filter != 'all':
+        query = query.filter(StudentNote.status == status_filter)
+        print(f"Filtering by status: {status_filter}")
 
     if q:
         like = f"%{q}%"
@@ -1728,6 +1794,7 @@ def student_notes():
             StudentNote.section_course.ilike(like),
             StudentNote.note_type.ilike(like),
             StudentNote.description.ilike(like),
+            StudentNote.status.ilike(like),  # ADD status to search
             related_item_col.ilike(like),
             reported_by_col.ilike(like),
         ))
@@ -1741,8 +1808,29 @@ def student_notes():
 
     query = query.order_by(sort_col.desc() if direction == 'desc' else sort_col.asc())
     notes = query.all()
+    print("Final notes count:")
+    print(len(notes))
 
-    return render_template('student_notes.html', notes=notes, q=q, sort=sort, dir=direction)
+    return render_template('student_notes.html', notes=notes, q=q, sort=sort, dir=direction, status_filter=status_filter)
+
+@app.route('/notes/toggle_status/<int:id>', methods=['POST'])
+def toggle_note_status(id):
+    if session.get('role') not in ['admin', 'tech']:
+        return redirect(url_for('dashboard'))
+    
+    note = StudentNote.query.get_or_404(id)
+    
+    if note.status == 'pending':
+        note.status = 'resolved'
+        note.resolved_at = db.func.current_timestamp()
+        note.resolved_by = session['user_id']
+    else:
+        note.status = 'pending'
+        note.resolved_at = None
+        note.resolved_by = None
+    
+    db.session.commit()
+    return redirect(url_for('student_notes'))
 
 # Delete Student Note (Admin/Tech only)
 @app.route('/notes/delete/<int:id>', methods=['POST'])

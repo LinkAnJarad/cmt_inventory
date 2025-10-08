@@ -38,6 +38,13 @@
             aria-label="Search user notes"
           />
         </div>
+        <!-- Status Filter -->
+        <select name="status" 
+                class="border border-gray-300 rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 transition duration-200 bg-gray-50 focus:bg-white">
+          <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All Status</option>
+          <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
+          <option value="resolved" {% if status_filter == 'resolved' %}selected{% endif %}>Resolved</option>
+        </select>
         <!-- Keep current sort while searching -->
         <input type="hidden" name="sort" value="{{ sort|default('created_at') }}">
         <input type="hidden" name="dir" value="{{ dir|default('desc') }}">
@@ -64,13 +71,19 @@
     {% endif %}
   </div>
 
-  {% if q %}
+  {% if q or status_filter != 'all' %}
   <div class="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
     <p class="text-sm text-red-700">
       <svg class="inline h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
       </svg>
-      Search results for "<span class="font-semibold">{{ q }}</span>"
+      {% if q and status_filter != 'all' %}
+        Search results for "<span class="font-semibold">{{ q }}</span>" with status "<span class="font-semibold">{{ status_filter }}</span>"
+      {% elif q %}
+        Search results for "<span class="font-semibold">{{ q }}</span>"
+      {% else %}
+        Showing "<span class="font-semibold">{{ status_filter }}</span>" issues
+      {% endif %}
     </p>
   </div>
   {% endif %}
@@ -89,7 +102,7 @@
             {%- set is_sorted = (_sort == field) -%}
             {%- set next_dir = 'desc' if is_sorted and _dir == 'asc' else 'asc' -%}
             <a
-              href="{{ url_for('student_notes', sort=field, dir=next_dir, q=q) }}"
+              href="{{ url_for('student_notes', sort=field, dir=next_dir, q=q, status=status_filter) }}"
               class="group inline-flex items-center gap-2 text-gray-700 hover:text-red-700 font-medium transition-colors"
             >
               <span>{{ label }}</span>
@@ -114,6 +127,9 @@
             {{ sort_link('Issue Type', 'note_type') }}
           </th>
           <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            {{ sort_link('Status', 'status') }}
+          </th>
+          <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
             {{ sort_link('Description', 'description') }}
           </th>
           <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
@@ -135,7 +151,7 @@
         <tr class="hover:bg-red-50 transition-colors duration-150">
           <td class="px-6 py-4 whitespace-nowrap">
             <div class="flex items-center">
-              <div class="h-2 w-2 bg-red-500 rounded-full mr-3"></div>
+              <div class="h-2 w-2 {% if note.status == 'pending' %}bg-yellow-500{% else %}bg-green-500{% endif %} rounded-full mr-3"></div>
               <span class="text-sm font-semibold text-gray-900">{{ note.person_name }}</span>
             </div>
           </td>
@@ -182,6 +198,28 @@
               {{ note.note_type.title() }}
             </span>
           </td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                         {% if note.status == 'pending' %}bg-yellow-100 text-yellow-800
+                         {% else %}bg-green-100 text-green-800{% endif %}">
+              {% if note.status == 'pending' %}
+                <svg class="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                Pending
+              {% else %}
+                <svg class="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+                Resolved
+              {% endif %}
+            </span>
+            {% if note.status == 'resolved' and note.resolved_at %}
+              <div class="text-xs text-gray-500 mt-1">
+                {{ note.resolved_at.strftime('%Y-%m-%d %H:%M') }}
+              </div>
+            {% endif %}
+          </td>
           <td class="px-6 py-4 text-sm text-gray-700 max-w-xs truncate" title="{{ note.description }}">{{ note.description }}</td>
           <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
             {% if note.equipment %}
@@ -220,15 +258,36 @@
           </td>
           {% if session.role in ['admin', 'tech'] %}
           <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-            <form method="POST" action="{{ url_for('delete_student_note', id=note.id) }}" 
-                  onsubmit="return confirm('Are you sure you want to delete this note?')" class="inline">
-              <button type="submit" class="inline-flex items-center text-red-600 hover:text-red-800 font-medium transition-colors">
-                <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                </svg>
-                Delete
-              </button>
-            </form>
+            <div class="flex items-center space-x-2">
+              <!-- Toggle Status Button -->
+              <form method="POST" action="{{ url_for('toggle_note_status', id=note.id) }}" class="inline">
+                <button type="submit" 
+                        class="inline-flex items-center {% if note.status == 'pending' %}text-green-600 hover:text-green-800{% else %}text-yellow-600 hover:text-yellow-800{% endif %} font-medium transition-colors">
+                  {% if note.status == 'pending' %}
+                    <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Resolve
+                  {% else %}
+                    <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    Reopen
+                  {% endif %}
+                </button>
+              </form>
+              
+              <!-- Delete Button -->
+              <form method="POST" action="{{ url_for('delete_student_note', id=note.id) }}" 
+                    onsubmit="return confirm('Are you sure you want to delete this note?')" class="inline">
+                <button type="submit" class="inline-flex items-center text-red-600 hover:text-red-800 font-medium transition-colors">
+                  <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                  </svg>
+                  Delete
+                </button>
+              </form>
+            </div>
           </td>
           {% endif %}
         </tr>
@@ -248,13 +307,13 @@
   </div>
   <h3 class="text-lg font-semibold text-gray-900 mb-2">No User Notes Found</h3>
   <p class="text-gray-600 mb-4">
-    {% if q %}
-      No user notes found for "<span class="font-medium">{{ q }}</span>". Try adjusting your search terms.
+    {% if q or status_filter != 'all' %}
+      No user notes found for your current filters. Try adjusting your search terms or status filter.
     {% else %}
       No user issues or notes have been recorded.
     {% endif %}
   </p>
-  {% if session.role in ['admin', 'tech'] and not q %}
+  {% if session.role in ['admin', 'tech'] and not q and status_filter == 'all' %}
   <a href="{{ url_for('add_student_note') }}" class="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
     <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>

@@ -81,8 +81,12 @@ class StudentNote(db.Model):
     consumable_id = db.Column(db.Integer, db.ForeignKey('consumable.id'), nullable=True)
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+    status = db.Column(db.String(20), nullable=False, default='pending')  # 'pending' or 'resolved'
+    resolved_at = db.Column(db.DateTime, nullable=True)
+    resolved_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     
-    # Relationships
+    # Relationships - specify foreign_keys for both User relationships
     equipment = db.relationship('Equipment', backref='student_notes')
     consumable = db.relationship('Consumable', backref='student_notes')
-    creator = db.relationship('User', backref='created_notes')
+    creator = db.relationship('User', foreign_keys=[created_by], backref='created_notes')
+    resolver = db.relationship('User', foreign_keys=[resolved_by], backref='resolved_notes')
