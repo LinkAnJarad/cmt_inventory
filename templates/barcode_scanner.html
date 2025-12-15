@@ -1,0 +1,431 @@
+<!-- Barcode Scanner Modal Component -->
+<!-- Include this in any page where you want barcode scanning functionality -->
+
+<!-- Scanner Button (can be placed anywhere) -->
+<button type="button" onclick="openBarcodeScanner()" 
+        class="group flex items-center space-x-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white px-4 py-3 rounded-lg hover:from-purple-700 hover:to-purple-800 font-medium transition duration-200 shadow-lg"
+        title="Scan barcode to quickly find items">
+  <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
+  </svg>
+  <span>Scan Barcode</span>
+</button>
+
+<!-- Scanner Modal -->
+<div id="barcodeScannerModal" class="fixed inset-0 z-50 hidden">
+  <!-- Backdrop -->
+  <div class="fixed inset-0 bg-black bg-opacity-50 transition-opacity" onclick="closeBarcodeScanner()"></div>
+  
+  <!-- Modal Content -->
+  <div class="fixed inset-0 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden relative">
+      <!-- Header -->
+      <div class="px-6 py-4 bg-gradient-to-r from-purple-600 to-purple-700 text-white">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-3">
+            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
+            </svg>
+            <h2 class="text-xl font-semibold">Barcode Scanner</h2>
+          </div>
+          <button onclick="closeBarcodeScanner()" class="text-white hover:text-purple-200 transition-colors">
+            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      
+      <!-- Body -->
+      <div class="p-6">
+        <!-- Tab Buttons -->
+        <div class="flex space-x-2 mb-4">
+          <button onclick="switchScannerTab('camera')" id="tabCamera"
+                  class="flex-1 px-4 py-2 rounded-lg font-medium transition-colors bg-purple-100 text-purple-700">
+            📷 Camera
+          </button>
+          <button onclick="switchScannerTab('manual')" id="tabManual"
+                  class="flex-1 px-4 py-2 rounded-lg font-medium transition-colors bg-gray-100 text-gray-600 hover:bg-gray-200">
+            ⌨️ Manual Entry
+          </button>
+        </div>
+        
+        <!-- Camera Scanner Tab -->
+        <div id="cameraScannerTab">
+          <div class="relative bg-gray-900 rounded-lg overflow-hidden mb-4" style="min-height: 300px;">
+            <!-- QuaggaJS will inject video element here -->
+            <div id="scannerViewport" class="w-full" style="min-height: 300px;"></div>
+            
+            <!-- Scanning overlay -->
+            <div id="scannerOverlay" class="absolute inset-0 flex items-center justify-center pointer-events-none hidden">
+              <div class="w-64 h-32 border-2 border-purple-400 rounded-lg relative">
+                <div class="absolute inset-0 border-t-2 border-purple-500 animate-pulse" style="animation: scanLine 2s linear infinite;"></div>
+              </div>
+            </div>
+            
+            <!-- Loading state -->
+            <div id="scannerLoading" class="absolute inset-0 flex items-center justify-center bg-gray-900">
+              <div class="text-center text-white">
+                <svg class="animate-spin h-8 w-8 mx-auto mb-2" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <p>Initializing camera...</p>
+              </div>
+            </div>
+            
+            <!-- Error state -->
+            <div id="scannerError" class="absolute inset-0 hidden items-center justify-center bg-gray-900">
+              <div class="text-center text-white p-4">
+                <svg class="h-12 w-12 mx-auto mb-2 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                </svg>
+                <p id="scannerErrorMessage">Camera access denied</p>
+                <button onclick="switchScannerTab('manual')" class="mt-3 px-4 py-2 bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors">
+                  Use Manual Entry
+                </button>
+              </div>
+            </div>
+          </div>
+          <p class="text-sm text-gray-600 text-center">Point your camera at a barcode to scan</p>
+        </div>
+        
+        <!-- Manual Entry Tab -->
+        <div id="manualEntryTab" class="hidden">
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Enter Barcode</label>
+              <div class="flex space-x-2">
+                <input type="text" id="manualBarcodeInput" 
+                       placeholder="e.g., EQ-0001-A1B2"
+                       class="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                       onkeypress="if(event.key==='Enter') lookupBarcode()">
+                <button onclick="lookupBarcode()" 
+                        class="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium">
+                  Search
+                </button>
+              </div>
+            </div>
+            <p class="text-sm text-gray-500">
+              Enter the barcode value printed below the barcode image (e.g., EQ-0001-XXXX for equipment, CON-0001-XXXX for consumables)
+            </p>
+          </div>
+        </div>
+        
+        <!-- Result Area -->
+        <div id="scanResultArea" class="hidden mt-4 p-4 rounded-lg border-2 border-dashed">
+          <div id="scanResultContent"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  @keyframes scanLine {
+    0% { transform: translateY(0); opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { transform: translateY(100%); opacity: 1; }
+  }
+  
+  /* Style the QuaggaJS-injected video element */
+  #scannerViewport video {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 300px;
+    object-fit: cover;
+  }
+  
+  #scannerViewport canvas {
+    display: none;
+  }
+  
+  #scannerViewport canvas.drawingBuffer {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+  }
+</style>
+
+<script src="https://unpkg.com/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
+<script>
+  let scannerActive = false;
+  let quaggaInitialized = false;
+  
+  function openBarcodeScanner() {
+    document.getElementById('barcodeScannerModal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    startCameraScanner();
+  }
+  
+  function closeBarcodeScanner() {
+    document.getElementById('barcodeScannerModal').classList.add('hidden');
+    document.body.style.overflow = '';
+    stopCameraScanner();
+    hideResult();
+  }
+  
+  function switchScannerTab(tab) {
+    const cameraTab = document.getElementById('cameraScannerTab');
+    const manualTab = document.getElementById('manualEntryTab');
+    const tabCamera = document.getElementById('tabCamera');
+    const tabManual = document.getElementById('tabManual');
+    
+    if (tab === 'camera') {
+      cameraTab.classList.remove('hidden');
+      manualTab.classList.add('hidden');
+      tabCamera.classList.remove('bg-gray-100', 'text-gray-600');
+      tabCamera.classList.add('bg-purple-100', 'text-purple-700');
+      tabManual.classList.remove('bg-purple-100', 'text-purple-700');
+      tabManual.classList.add('bg-gray-100', 'text-gray-600');
+      startCameraScanner();
+    } else {
+      cameraTab.classList.add('hidden');
+      manualTab.classList.remove('hidden');
+      tabManual.classList.remove('bg-gray-100', 'text-gray-600');
+      tabManual.classList.add('bg-purple-100', 'text-purple-700');
+      tabCamera.classList.remove('bg-purple-100', 'text-purple-700');
+      tabCamera.classList.add('bg-gray-100', 'text-gray-600');
+      stopCameraScanner();
+      document.getElementById('manualBarcodeInput').focus();
+    }
+    hideResult();
+  }
+  
+  function startCameraScanner() {
+    if (scannerActive) return;
+    
+    const loadingEl = document.getElementById('scannerLoading');
+    const errorEl = document.getElementById('scannerError');
+    const overlayEl = document.getElementById('scannerOverlay');
+    const viewportEl = document.getElementById('scannerViewport');
+    
+    // Reset viewport content
+    viewportEl.innerHTML = '';
+    
+    loadingEl.classList.remove('hidden');
+    errorEl.classList.add('hidden');
+    overlayEl.classList.add('hidden');
+    
+    // Small delay to let modal render
+    setTimeout(() => {
+      Quagga.init({
+        inputStream: {
+          name: "Live",
+          type: "LiveStream",
+          target: viewportEl,
+          constraints: {
+            facingMode: "environment",
+            width: { min: 640, ideal: 1280, max: 1920 },
+            height: { min: 480, ideal: 720, max: 1080 }
+          }
+        },
+        decoder: {
+          readers: [
+            "code_128_reader",
+            "ean_reader",
+            "ean_8_reader",
+            "code_39_reader",
+            "code_39_vin_reader",
+            "codabar_reader",
+            "upc_reader",
+            "upc_e_reader"
+          ]
+        },
+        locate: true,
+        locator: {
+          patchSize: "medium",
+          halfSample: true
+        }
+      }, function(err) {
+        loadingEl.classList.add('hidden');
+        
+        if (err) {
+          console.error('Scanner init error:', err);
+          let errorMsg = 'Could not start camera';
+          if (err.name === 'NotAllowedError') {
+            errorMsg = 'Camera access denied. Please allow camera access and try again.';
+          } else if (err.name === 'NotFoundError') {
+            errorMsg = 'No camera found on this device.';
+          } else if (err.name === 'NotReadableError') {
+            errorMsg = 'Camera is in use by another application.';
+          } else if (err.message) {
+            errorMsg = 'Camera error: ' + err.message;
+          }
+          document.getElementById('scannerErrorMessage').textContent = errorMsg;
+          errorEl.classList.remove('hidden');
+          errorEl.classList.add('flex');
+          return;
+        }
+        
+        scannerActive = true;
+        quaggaInitialized = true;
+        overlayEl.classList.remove('hidden');
+        Quagga.start();
+        console.log('Quagga scanner started successfully');
+      });
+      
+      // Only set up the detection handler once
+      if (!quaggaInitialized) {
+        Quagga.onDetected(function(result) {
+          if (result && result.codeResult && result.codeResult.code) {
+            const code = result.codeResult.code;
+            console.log('Barcode detected:', code);
+            // Play beep sound
+            playBeep();
+            // Stop scanning temporarily
+            Quagga.pause();
+            // Look up the barcode
+            lookupBarcodeValue(code);
+          }
+        });
+      }
+    }, 100);
+  }
+  
+  function stopCameraScanner() {
+    if (scannerActive) {
+      try {
+        Quagga.stop();
+      } catch (e) {
+        console.log('Error stopping Quagga:', e);
+      }
+      scannerActive = false;
+    }
+  }
+  
+  function playBeep() {
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.value = 1000;
+      oscillator.type = 'sine';
+      gainNode.gain.value = 0.3;
+      
+      oscillator.start();
+      setTimeout(() => oscillator.stop(), 100);
+    } catch (e) {
+      console.log('Could not play beep:', e);
+    }
+  }
+  
+  function lookupBarcode() {
+    const code = document.getElementById('manualBarcodeInput').value.trim();
+    if (code) {
+      lookupBarcodeValue(code);
+    }
+  }
+  
+  function lookupBarcodeValue(code) {
+    showResult('loading', `<div class="flex items-center justify-center py-4">
+      <svg class="animate-spin h-6 w-6 text-purple-600 mr-2" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      </svg>
+      <span>Looking up: ${code}</span>
+    </div>`);
+    
+    fetch('/barcode/lookup?code=' + encodeURIComponent(code))
+      .then(response => response.json())
+      .then(data => {
+        if (data.found) {
+          const typeColor = data.type === 'equipment' ? 'green' : 'blue';
+          const typeLabel = data.type === 'equipment' ? 'Equipment' : 'Consumable';
+          const actionUrl = data.type === 'equipment' ? data.borrow_url : data.use_url;
+          const actionLabel = data.type === 'equipment' ? 'Borrow' : 'Use';
+          
+          showResult('success', `
+            <div class="flex items-start space-x-4">
+              <div class="flex-shrink-0">
+                <div class="h-12 w-12 bg-${typeColor}-100 rounded-lg flex items-center justify-center">
+                  <svg class="h-6 w-6 text-${typeColor}-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                  </svg>
+                </div>
+              </div>
+              <div class="flex-1">
+                <span class="inline-block px-2 py-1 text-xs font-medium rounded bg-${typeColor}-100 text-${typeColor}-700 mb-2">${typeLabel}</span>
+                <h4 class="font-semibold text-gray-900">${data.description}</h4>
+                <p class="text-sm text-gray-600">ID: ${data.id} | Barcode: ${data.barcode}</p>
+                <div class="mt-3 flex space-x-2">
+                  <a href="${data.url}" class="px-4 py-2 bg-gray-600 text-white text-sm rounded-lg hover:bg-gray-700 transition-colors">
+                    View Details
+                  </a>
+                  <a href="${actionUrl}" class="px-4 py-2 bg-${typeColor}-600 text-white text-sm rounded-lg hover:bg-${typeColor}-700 transition-colors">
+                    ${actionLabel}
+                  </a>
+                </div>
+              </div>
+            </div>
+          `);
+        } else {
+          showResult('error', `
+            <div class="flex items-center space-x-3">
+              <div class="flex-shrink-0">
+                <svg class="h-8 w-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+              </div>
+              <div>
+                <p class="font-medium text-gray-900">No item found</p>
+                <p class="text-sm text-gray-600">Barcode: ${code}</p>
+              </div>
+            </div>
+          `);
+          
+          // Resume scanning after 2 seconds if camera is active
+          if (scannerActive) {
+            setTimeout(() => Quagga.start(), 2000);
+          }
+        }
+      })
+      .catch(error => {
+        console.error('Lookup error:', error);
+        showResult('error', `
+          <div class="text-center py-2">
+            <p class="text-red-600">Error looking up barcode. Please try again.</p>
+          </div>
+        `);
+        
+        if (scannerActive) {
+          setTimeout(() => Quagga.start(), 2000);
+        }
+      });
+  }
+  
+  function showResult(type, content) {
+    const area = document.getElementById('scanResultArea');
+    const contentEl = document.getElementById('scanResultContent');
+    
+    area.classList.remove('hidden', 'border-gray-300', 'border-green-300', 'border-red-300', 'bg-gray-50', 'bg-green-50', 'bg-red-50');
+    
+    if (type === 'success') {
+      area.classList.add('border-green-300', 'bg-green-50');
+    } else if (type === 'error') {
+      area.classList.add('border-red-300', 'bg-red-50');
+    } else {
+      area.classList.add('border-gray-300', 'bg-gray-50');
+    }
+    
+    contentEl.innerHTML = content;
+  }
+  
+  function hideResult() {
+    document.getElementById('scanResultArea').classList.add('hidden');
+  }
+  
+  // Close modal on Escape key
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && !document.getElementById('barcodeScannerModal').classList.contains('hidden')) {
+      closeBarcodeScanner();
+    }
+  });
+</script>

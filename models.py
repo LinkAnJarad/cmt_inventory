@@ -22,6 +22,7 @@ class Equipment(db.Model):
     model = db.Column(db.String(100))
     remarks = db.Column(db.String(100))
     location = db.Column(db.String(200))
+    barcode = db.Column(db.String(50), nullable=True)  # Barcode for quick scanning
 
 class Consumable(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -39,6 +40,7 @@ class Consumable(db.Model):
     units_expired = db.Column(db.Integer)
     # Added returnable field for powder/liquid items
     is_returnable = db.Column(db.Boolean, default=False, nullable=False)
+    barcode = db.Column(db.String(50), nullable=True)  # Barcode for quick scanning
 
 class BorrowLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -90,3 +92,20 @@ class StudentNote(db.Model):
     consumable = db.relationship('Consumable', backref='student_notes')
     creator = db.relationship('User', foreign_keys=[created_by], backref='created_notes')
     resolver = db.relationship('User', foreign_keys=[resolved_by], backref='resolved_notes')
+
+class EquipmentMaintenance(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    equipment_id = db.Column(db.Integer, db.ForeignKey('equipment.id'), nullable=False)
+    maintenance_type = db.Column(db.String(50), nullable=False)  # 'calibration', 'repair', 'preventive', 'inspection'
+    scheduled_date = db.Column(db.Date, nullable=False)
+    completed_date = db.Column(db.Date, nullable=True)
+    performed_by = db.Column(db.String(200), nullable=True)  # Technician/vendor name
+    notes = db.Column(db.Text, nullable=True)
+    cost = db.Column(db.Float, nullable=True, default=0.0)
+    status = db.Column(db.String(20), nullable=False, default='scheduled')  # 'scheduled', 'completed', 'overdue'
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+    
+    # Relationships
+    equipment = db.relationship('Equipment', backref='maintenance_records')
+    creator = db.relationship('User', backref='maintenance_created')

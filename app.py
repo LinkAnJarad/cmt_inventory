@@ -1,10 +1,15 @@
 import os
 import io
+import uuid
 from datetime import datetime
-from flask import Flask, render_template, request, redirect, url_for, session, send_file
-from models import db, User, Equipment, Consumable, BorrowLog, UsageLog, StudentNote
+from flask import Flask, render_template, request, redirect, url_for, session, send_file, jsonify
+from models import db, User, Equipment, Consumable, BorrowLog, UsageLog, StudentNote, EquipmentMaintenance
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import or_, func
+
+# Barcode generation
+import barcode
+from barcode.writer import ImageWriter, SVGWriter
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
@@ -405,7 +410,58 @@ def login():
 def dashboard():
     if 'user_id' not in session:
         return redirect(url_for('login'))
-    return render_template('dashboard.html', role=session['role'])
+    
+    from datetime import datetime, timedelta, date
+    current_date = datetime.now().date()
+    near_expiry_date = current_date + timedelta(days=30)
+    
+    # Low stock items (10% threshold)
+    low_stock_consumables = (db.session.query(Consumable)
+                           .filter(Consumable.previous_month_stock > 0)
+                           .filter((Consumable.items_out + Consumable.items_on_stock) < (Consumable.previous_month_stock * 0.1))
+                           .limit(5)  # Show top 5
+                           .all())
+    
+    # Near expiration consumables (within 30 days or already expired)
+    near_expiration = []
+    for c in Consumable.query.all():
+        if c.expiration and c.expiration != 'N/A':
+            try:
+                exp_date = datetime.strptime(c.expiration, '%Y-%m-%d').date()
+                if exp_date <= near_expiry_date:
+                    near_expiration.append(c)
+            except ValueError:
+                continue
+    # Limit to top 5
+    near_expiration = sorted(near_expiration, key=lambda x: x.expiration)[:5]
+    
+    # Maintenance alerts (overdue and upcoming)
+    overdue_maintenance = (EquipmentMaintenance.query
+                          .filter(EquipmentMaintenance.status == 'scheduled')
+                          .filter(EquipmentMaintenance.scheduled_date < current_date)
+                          .limit(5)
+                          .all())
+    
+    # Update status to overdue
+    for m in overdue_maintenance:
+        m.status = 'overdue'
+    db.session.commit()
+    
+    # Upcoming maintenance (next 7 days)
+    upcoming_date = current_date + timedelta(days=7)
+    upcoming_maintenance = (EquipmentMaintenance.query
+                           .filter(EquipmentMaintenance.status == 'scheduled')
+                           .filter(EquipmentMaintenance.scheduled_date >= current_date)
+                           .filter(EquipmentMaintenance.scheduled_date <= upcoming_date)
+                           .limit(5)
+                           .all())
+    
+    return render_template('dashboard.html', 
+                         role=session['role'],
+                         low_stock=low_stock_consumables,
+                         near_expiration=near_expiration,
+                         overdue_maintenance=overdue_maintenance,
+                         upcoming_maintenance=upcoming_maintenance)
 
 # Update equipment function for bulk borrowing calculation
 @app.route('/equipment')
@@ -417,6 +473,12 @@ def equipment():
     sort = request.args.get('sort', 'description')
     direction = request.args.get('dir', 'asc').lower()
     direction = 'desc' if direction == 'desc' else 'asc'
+    
+    # New filter parameters
+    location_filter = request.args.get('location', '').strip()
+    brand_filter = request.args.get('brand', '').strip()
+    date_from = request.args.get('date_from', '').strip()
+    date_to = request.args.get('date_to', '').strip()
 
     # Whitelist of sortable fields, including computed ones
     sortable_fields = {
@@ -456,6 +518,20 @@ def equipment():
             Equipment.date_purchased.ilike(like),
         ))
 
+    # Location filter
+    if location_filter:
+        query = query.filter(Equipment.location.ilike(f"%{location_filter}%"))
+
+    # Brand filter
+    if brand_filter:
+        query = query.filter(Equipment.brand_name.ilike(f"%{brand_filter}%"))
+
+    # Date range filter (date_purchased)
+    if date_from:
+        query = query.filter(Equipment.date_purchased >= date_from)
+    if date_to:
+        query = query.filter(Equipment.date_purchased <= date_to)
+
     # Sorting
     if sort == 'in_use':
         sort_col = in_use_col
@@ -475,7 +551,17 @@ def equipment():
         setattr(e, 'on_stock', int(on_stock or 0))
         items.append(e)
 
-    return render_template('equipment.html', items=items, q=q, sort=sort, dir=direction)
+    # Get unique values for filter dropdowns
+    all_locations = db.session.query(Equipment.location).filter(Equipment.location.isnot(None)).distinct().all()
+    locations = sorted([l[0] for l in all_locations if l[0] and l[0].strip()])
+    
+    all_brands = db.session.query(Equipment.brand_name).filter(Equipment.brand_name.isnot(None)).distinct().all()
+    brands = sorted([b[0] for b in all_brands if b[0] and b[0].strip()])
+
+    return render_template('equipment.html', items=items, q=q, sort=sort, dir=direction,
+                         location_filter=location_filter, brand_filter=brand_filter,
+                         date_from=date_from, date_to=date_to,
+                         locations=locations, brands=brands)
 
 @app.route('/consumables')
 def consumables():
@@ -486,6 +572,15 @@ def consumables():
     sort = request.args.get('sort', 'description')
     direction = request.args.get('dir', 'asc').lower()
     direction = 'desc' if direction == 'desc' else 'asc'
+    
+    # New filter parameters
+    date_received_filter = request.args.get('date_received', '').strip()  # YYYY-MM (year-month)
+    is_returnable_filter = request.args.get('is_returnable', '').strip()  # 'true', 'false', or empty for all
+    date_from = request.args.get('date_from', '').strip()  # Date range start
+    date_to = request.args.get('date_to', '').strip()      # Date range end
+    group_by_month = request.args.get('group_by_month', '').strip()  # 'true' to group rows by month
+    expiration_status = request.args.get('expiration_status', '').strip()  # 'expired', 'expiring_soon', 'ok', or empty for all
+    stock_status = request.args.get('stock_status', '').strip()  # 'critical', 'depleting', or empty for all
 
     # Updated sortable fields (removed test and total)
     sortable_fields = {
@@ -508,6 +603,57 @@ def consumables():
             Consumable.date_received.ilike(like),
         ))
 
+    # Returnable filter
+    if is_returnable_filter in ['true', 'false']:
+        is_returnable_val = is_returnable_filter == 'true'
+        query = query.filter(Consumable.is_returnable == is_returnable_val)
+
+    # Date received filter (specific month YYYY-MM or date range)
+    if date_received_filter:
+        # Filter by exact month (YYYY-MM format)
+        query = query.filter(Consumable.date_received.like(f"{date_received_filter}%"))
+    elif date_from or date_to:
+        # Filter by date range
+        if date_from:
+            query = query.filter(Consumable.date_received >= date_from)
+        if date_to:
+            query = query.filter(Consumable.date_received <= date_to)
+
+    # Expiration status filter
+    if expiration_status:
+        today = datetime.now().date()
+        thirty_days_from_now = today + __import__('datetime').timedelta(days=30)
+        
+        if expiration_status == 'expired':
+            # Items already expired
+            query = query.filter(Consumable.expiration < today.strftime('%Y-%m-%d'))
+        elif expiration_status == 'expiring_soon':
+            # Items expiring within 30 days
+            query = query.filter(
+                Consumable.expiration >= today.strftime('%Y-%m-%d'),
+                Consumable.expiration <= thirty_days_from_now.strftime('%Y-%m-%d')
+            )
+        elif expiration_status == 'ok':
+            # Items not expiring soon
+            query = query.filter(Consumable.expiration > thirty_days_from_now.strftime('%Y-%m-%d'))
+
+    # Stock depletion filter - check if (items_out + items_on_stock) < 10% of previous_month_stock
+    if stock_status:
+        if stock_status == 'critical':
+            # Critical: less than 10% of previous_month_stock remaining
+            # balance_stock < 0.1 * previous_month_stock (where balance_stock = items_out + items_on_stock)
+            query = query.filter(
+                Consumable.previous_month_stock > 0,
+                (Consumable.items_out + Consumable.items_on_stock) < (Consumable.previous_month_stock * 0.1)
+            )
+        elif stock_status == 'depleting':
+            # Depleting: 10-25% of previous_month_stock remaining
+            query = query.filter(
+                Consumable.previous_month_stock > 0,
+                (Consumable.items_out + Consumable.items_on_stock) >= (Consumable.previous_month_stock * 0.1),
+                (Consumable.items_out + Consumable.items_on_stock) < (Consumable.previous_month_stock * 0.25)
+            )
+
     sort_col = getattr(Consumable, sort)
     if direction == 'desc':
         query = query.order_by(sort_col.desc())
@@ -515,12 +661,41 @@ def consumables():
         query = query.order_by(sort_col.asc())
 
     items = query.all()
-    return render_template('consumables.html', items=items, q=q, sort=sort, dir=direction)
+    
+    # Group items by month if requested
+    grouped_items = None
+    if group_by_month == 'true':
+        from collections import defaultdict
+        grouped_items = defaultdict(list)
+        for item in items:
+            month_key = item.date_received[:7] if item.date_received else 'N/A'
+            grouped_items[month_key].append(item)
+        # Sort group keys
+        grouped_items = dict(sorted(grouped_items.items(), reverse=True))
+
+    # Get unique values for filter dropdowns
+    all_months = db.session.query(
+        func.substr(Consumable.date_received, 1, 7).label('month')
+    ).filter(
+        Consumable.date_received.isnot(None),
+        func.length(Consumable.date_received) >= 7
+    ).distinct().all()
+    months = sorted([m[0] for m in all_months if m[0]], reverse=True)
+
+    return render_template('consumables.html', items=items, q=q, sort=sort, dir=direction,
+                         date_received_filter=date_received_filter,
+                         date_from=date_from, date_to=date_to,
+                         is_returnable_filter=is_returnable_filter,
+                         group_by_month=group_by_month,
+                         grouped_items=grouped_items,
+                         available_months=months,
+                         expiration_status=expiration_status,
+                         stock_status=stock_status)
 
 @app.route('/consumables/export/pdf')
 def export_consumables_pdf():
     """
-    Export the current consumables view (respecting q, sort, dir)
+    Export the current consumables view (respecting q, sort, dir, date_received, date_from, date_to, is_returnable)
     to a landscape A4 PDF table with text wrapping.
     """
     if 'user_id' not in session:
@@ -541,6 +716,14 @@ def export_consumables_pdf():
     sort = request.args.get('sort', 'description')
     direction = request.args.get('dir', 'asc').lower()
     direction = 'desc' if direction == 'desc' else 'asc'
+    
+    # New filter parameters
+    date_received_filter = request.args.get('date_received', '').strip()
+    is_returnable_filter = request.args.get('is_returnable', '').strip()
+    date_from = request.args.get('date_from', '').strip()
+    date_to = request.args.get('date_to', '').strip()
+    expiration_status = request.args.get('expiration_status', '').strip()
+    stock_status = request.args.get('stock_status', '').strip()
 
     # Updated sortable fields (removed test and total, added is_returnable)
     sortable_fields = {
@@ -561,6 +744,48 @@ def export_consumables_pdf():
             Consumable.lot_number.ilike(like),
             Consumable.date_received.ilike(like),
         ))
+
+    # Apply new filters
+    if is_returnable_filter in ['true', 'false']:
+        is_returnable_val = is_returnable_filter == 'true'
+        query = query.filter(Consumable.is_returnable == is_returnable_val)
+
+    if date_received_filter:
+        query = query.filter(Consumable.date_received.like(f"{date_received_filter}%"))
+    elif date_from or date_to:
+        if date_from:
+            query = query.filter(Consumable.date_received >= date_from)
+        if date_to:
+            query = query.filter(Consumable.date_received <= date_to)
+
+    # Expiration status filter
+    if expiration_status:
+        today = datetime.now().date()
+        thirty_days_from_now = today + __import__('datetime').timedelta(days=30)
+        
+        if expiration_status == 'expired':
+            query = query.filter(Consumable.expiration < today.strftime('%Y-%m-%d'))
+        elif expiration_status == 'expiring_soon':
+            query = query.filter(
+                Consumable.expiration >= today.strftime('%Y-%m-%d'),
+                Consumable.expiration <= thirty_days_from_now.strftime('%Y-%m-%d')
+            )
+        elif expiration_status == 'ok':
+            query = query.filter(Consumable.expiration > thirty_days_from_now.strftime('%Y-%m-%d'))
+
+    # Stock depletion filter
+    if stock_status:
+        if stock_status == 'critical':
+            query = query.filter(
+                Consumable.previous_month_stock > 0,
+                (Consumable.items_out + Consumable.items_on_stock) < (Consumable.previous_month_stock * 0.1)
+            )
+        elif stock_status == 'depleting':
+            query = query.filter(
+                Consumable.previous_month_stock > 0,
+                (Consumable.items_out + Consumable.items_on_stock) >= (Consumable.previous_month_stock * 0.1),
+                (Consumable.items_out + Consumable.items_on_stock) < (Consumable.previous_month_stock * 0.25)
+            )
 
     sort_col = getattr(Consumable, sort)
     query = query.order_by(sort_col.desc() if direction == 'desc' else sort_col.asc())
@@ -605,11 +830,29 @@ def export_consumables_pdf():
     elements = []
 
     title = Paragraph("Consumables Inventory Report", styles["Title"])
-    meta = Paragraph(
-        f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')} "
-        f"| Search: '{q or ''}' | Sort: {sort} {direction.upper()}",
-        styles["Normal"],
-    )
+    
+    # Build filter metadata string
+    filter_info = []
+    if q:
+        filter_info.append(f"Search: '{q}'")
+    if is_returnable_filter in ['true', 'false']:
+        returnable_text = "Returnable" if is_returnable_filter == 'true' else "Non-Returnable"
+        filter_info.append(returnable_text)
+    if date_received_filter:
+        filter_info.append(f"Month Received: {date_received_filter}")
+    if date_from or date_to:
+        date_range = f"Date Range: {date_from or 'any'} to {date_to or 'any'}"
+        filter_info.append(date_range)
+    if expiration_status:
+        status_map = {'expired': 'Already Expired', 'expiring_soon': 'Expiring Soon (30d)', 'ok': 'Safe (30d+)'}
+        filter_info.append(f"Expiration: {status_map.get(expiration_status, expiration_status)}")
+    if stock_status:
+        status_map = {'critical': 'Critical (<10%)', 'depleting': 'Depleting (10-25%)'}
+        filter_info.append(f"Stock: {status_map.get(stock_status, stock_status)}")
+    filter_text = " | ".join(filter_info) if filter_info else "No filters applied"
+    
+    meta_text = f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')} | {filter_text} | Sort: {sort} {direction.upper()}"
+    meta = Paragraph(meta_text, styles["Normal"])
 
     elements.append(title)
     elements.append(Spacer(1, 6))
@@ -684,7 +927,7 @@ def export_consumables_pdf():
 @app.route('/equipment/export/pdf')
 def export_equipment_pdf():
     """
-    Export the current equipment view (respecting q, sort, dir)
+    Export the current equipment view (respecting q, sort, dir, location, brand, date range)
     to a landscape A4 PDF table with text wrapping.
     """
     if 'user_id' not in session:
@@ -704,6 +947,12 @@ def export_equipment_pdf():
     sort = request.args.get('sort', 'description')
     direction = request.args.get('dir', 'asc').lower()
     direction = 'desc' if direction == 'desc' else 'asc'
+    
+    # New filter parameters
+    location_filter = request.args.get('location', '').strip()
+    brand_filter = request.args.get('brand', '').strip()
+    date_from = request.args.get('date_from', '').strip()
+    date_to = request.args.get('date_to', '').strip()
 
     # Whitelist includes computed fields
     sortable_fields = {
@@ -740,6 +989,16 @@ def export_equipment_pdf():
             Equipment.location.ilike(like),
             Equipment.date_purchased.ilike(like),
         ))
+
+    # Apply new filters
+    if location_filter:
+        query = query.filter(Equipment.location.ilike(f"%{location_filter}%"))
+    if brand_filter:
+        query = query.filter(Equipment.brand_name.ilike(f"%{brand_filter}%"))
+    if date_from:
+        query = query.filter(Equipment.date_purchased >= date_from)
+    if date_to:
+        query = query.filter(Equipment.date_purchased <= date_to)
 
     if sort == 'in_use':
         sort_col = in_use_col
@@ -790,11 +1049,22 @@ def export_equipment_pdf():
     elements = []
     elements.append(Paragraph("Equipment Inventory Report", styles["Title"]))
     elements.append(Spacer(1, 6))
-    elements.append(Paragraph(
-        f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')} "
-        f"| Search: '{q or ''}' | Sort: {sort} {direction.upper()}",
-        styles["Normal"],
-    ))
+    
+    # Build filter metadata string
+    filter_info = []
+    if q:
+        filter_info.append(f"Search: '{q}'")
+    if location_filter:
+        filter_info.append(f"Location: {location_filter}")
+    if brand_filter:
+        filter_info.append(f"Brand: {brand_filter}")
+    if date_from or date_to:
+        date_range = f"Date: {date_from or 'any'} to {date_to or 'any'}"
+        filter_info.append(date_range)
+    filter_text = " | ".join(filter_info) if filter_info else "No filters applied"
+    
+    meta_text = f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')} | {filter_text} | Sort: {sort} {direction.upper()}"
+    elements.append(Paragraph(meta_text, styles["Normal"]))
     elements.append(Spacer(1, 12))
 
     # Prepare data
@@ -1849,11 +2119,69 @@ def analytics():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
-    # Low stock items (10% threshold)
+    from datetime import datetime, timedelta
+    current_date = datetime.now().date()
+    near_expiry_date = current_date + timedelta(days=30)
+    thirty_days_ago = current_date - timedelta(days=30)
+    
+    # === ALERTS & INVENTORY ===
+    # Low stock items (10% threshold: items_out + items_on_stock < 10% of previous_month_stock)
     low_stock_consumables = (db.session.query(Consumable)
-                           .filter(Consumable.items_on_stock <= (Consumable.previous_month_stock * 0.1))
-                           .filter(Consumable.previous_month_stock.isnot(None))
+                           .filter(Consumable.previous_month_stock > 0)
+                           .filter((Consumable.items_out + Consumable.items_on_stock) < (Consumable.previous_month_stock * 0.1))
                            .all())
+    
+    # Near expiration consumables (within 30 days or already expired)
+    near_expiration = []
+    for c in Consumable.query.all():
+        if c.expiration and c.expiration != 'N/A':
+            try:
+                exp_date = datetime.strptime(c.expiration, '%Y-%m-%d').date()
+                if exp_date <= near_expiry_date:
+                    near_expiration.append(c)
+            except ValueError:
+                continue
+    
+    # === USAGE TRENDS ===
+    # Equipment borrowing trends (last 30 days including today)
+    recent_borrows = (db.session.query(BorrowLog)
+                     .filter(BorrowLog.borrowed_at >= datetime.combine(thirty_days_ago, datetime.min.time()))
+                     .all())
+    borrow_count_30d = len(recent_borrows)
+    active_borrows = db.session.query(BorrowLog).filter(BorrowLog.returned_at.is_(None)).count()
+    
+    # Daily borrowing breakdown (count of students who borrowed per day)
+    daily_borrows = {}
+    for i in range(31):  # 31 days to include today
+        day = thirty_days_ago + timedelta(days=i)
+        day_str = day.strftime('%Y-%m-%d')
+        daily_borrows[day_str] = 0
+    
+    for borrow in recent_borrows:
+        if borrow.borrowed_at:
+            borrow_date = borrow.borrowed_at.date().strftime('%Y-%m-%d')
+            if borrow_date in daily_borrows:
+                daily_borrows[borrow_date] += 1
+    
+    # Consumable usage trends (last 30 days including today)
+    recent_usage = (db.session.query(UsageLog)
+                   .filter(UsageLog.used_at >= datetime.combine(thirty_days_ago, datetime.min.time()))
+                   .all())
+    usage_count_30d = len(recent_usage)
+    total_units_consumed_30d = sum(u.quantity_used for u in recent_usage)
+    
+    # Daily usage breakdown (count of students who used consumables per day)
+    daily_usage = {}
+    for i in range(31):  # 31 days to include today
+        day = thirty_days_ago + timedelta(days=i)
+        day_str = day.strftime('%Y-%m-%d')
+        daily_usage[day_str] = 0
+    
+    for usage in recent_usage:
+        if usage.used_at:
+            usage_date = usage.used_at.date().strftime('%Y-%m-%d')
+            if usage_date in daily_usage:
+                daily_usage[usage_date] += 1
     
     # Most borrowed equipment (top 5)
     most_borrowed = (db.session.query(Equipment, func.count(BorrowLog.id).label('borrow_count'))
@@ -1863,10 +2191,145 @@ def analytics():
                     .limit(5)
                     .all())
     
-    # Near expiration consumables (within 30 days or already expired)
+    # Top consumed items (top 5)
+    top_consumed = (db.session.query(Consumable)
+                   .filter(Consumable.units_consumed > 0)
+                   .order_by(Consumable.units_consumed.desc())
+                   .limit(5)
+                   .all())
+    
+    # === STUDENT NOTES/ISSUES TRENDS ===
+    all_notes = StudentNote.query.all()
+    pending_notes = StudentNote.query.filter(StudentNote.status == 'pending').all()
+    resolved_notes = StudentNote.query.filter(StudentNote.status == 'resolved').all()
+    
+    # Group notes by issue type
+    issues_by_type = {}
+    for note in all_notes:
+        note_type = note.note_type
+        if note_type not in issues_by_type:
+            issues_by_type[note_type] = 0
+        issues_by_type[note_type] += 1
+    
+    # Recent issues (last 30 days)
+    recent_issues = (db.session.query(StudentNote)
+                    .filter(StudentNote.created_at >= thirty_days_ago.strftime('%Y-%m-%d'))
+                    .all())
+    recent_pending = [n for n in recent_issues if n.status == 'pending']
+    
+    # === MAINTENANCE TRENDS ===
+    # All maintenance records
+    all_maintenance = EquipmentMaintenance.query.all()
+    completed_maintenance = [m for m in all_maintenance if m.status == 'completed']
+    scheduled_maintenance = [m for m in all_maintenance if m.status == 'scheduled']
+    
+    # Auto-update overdue status
+    for m in scheduled_maintenance:
+        if m.scheduled_date and m.scheduled_date < current_date:
+            m.status = 'overdue'
+    db.session.commit()
+    
+    # Recalculate after status updates
+    overdue_maintenance = [m for m in all_maintenance if m.status == 'overdue']
+    scheduled_maintenance = [m for m in all_maintenance if m.status == 'scheduled']
+    
+    # Recent maintenance (last 30 days)
+    recent_maintenance = [m for m in all_maintenance if m.created_at and m.created_at.date() >= thirty_days_ago]
+    recent_completed = [m for m in recent_maintenance if m.status == 'completed']
+    
+    # Maintenance by type
+    maintenance_by_type = {}
+    for m in all_maintenance:
+        m_type = m.maintenance_type
+        if m_type not in maintenance_by_type:
+            maintenance_by_type[m_type] = 0
+        maintenance_by_type[m_type] += 1
+    
+    # Total maintenance cost
+    total_maintenance_cost = sum(_to_int(m.cost, 0) for m in completed_maintenance)
+    
+    # Completion rate
+    maintenance_completion_rate = 0
+    if len(all_maintenance) > 0:
+        maintenance_completion_rate = round((len(completed_maintenance) / len(all_maintenance)) * 100, 1)
+    
+    # === OVERALL STATISTICS ===
+    total_equipment = Equipment.query.count()
+    total_consumables = Consumable.query.count()
+    total_users = User.query.count()
+    
+    # Equipment currently in use
+    equipment_in_use = (db.session.query(Equipment)
+                       .join(BorrowLog, BorrowLog.equipment_id == Equipment.id)
+                       .filter(BorrowLog.returned_at.is_(None))
+                       .distinct()
+                       .count())
+    
+    return render_template('analytics.html',
+                         # Alerts & Inventory
+                         low_stock=low_stock_consumables,
+                         near_expiration=near_expiration,
+                         # Usage Trends
+                         most_borrowed=most_borrowed,
+                         top_consumed=top_consumed,
+                         borrow_count_30d=borrow_count_30d,
+                         active_borrows=active_borrows,
+                         usage_count_30d=usage_count_30d,
+                         total_units_consumed_30d=total_units_consumed_30d,
+                         daily_borrows=daily_borrows,
+                         daily_usage=daily_usage,
+                         # Notes Trends
+                         all_notes_count=len(all_notes),
+                         pending_notes_count=len(pending_notes),
+                         resolved_notes_count=len(resolved_notes),
+                         recent_pending_count=len(recent_pending),
+                         issues_by_type=issues_by_type,
+                         recent_issues=recent_issues[:10],  # Last 10 issues
+                         # Maintenance Trends
+                         all_maintenance_count=len(all_maintenance),
+                         completed_maintenance_count=len(completed_maintenance),
+                         scheduled_maintenance_count=len(scheduled_maintenance),
+                         overdue_maintenance_count=len(overdue_maintenance),
+                         recent_completed_count=len(recent_completed),
+                         maintenance_by_type=maintenance_by_type,
+                         total_maintenance_cost=total_maintenance_cost,
+                         maintenance_completion_rate=maintenance_completion_rate,
+                         recent_maintenance=recent_maintenance[:10],  # Last 10 maintenance records
+                         # Overall Statistics
+                         total_equipment=total_equipment,
+                         total_consumables=total_consumables,
+                         total_users=total_users,
+                         equipment_in_use=equipment_in_use)
+
+@app.route('/analytics/export/pdf')
+def export_analytics_pdf():
+    """
+    Export the analytics dashboard as a comprehensive PDF report
+    including overall statistics, alerts, usage trends, and issues tracking.
+    """
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+    except ImportError:
+        return ("Missing dependency: reportlab. Install it first, e.g. "
+                "`pip install reportlab`"), 500
+
     from datetime import datetime, timedelta
     current_date = datetime.now().date()
     near_expiry_date = current_date + timedelta(days=30)
+    thirty_days_ago = current_date - timedelta(days=30)
+    
+    # === GATHER ALL DATA ===
+    low_stock_consumables = (db.session.query(Consumable)
+                           .filter(Consumable.previous_month_stock > 0)
+                           .filter((Consumable.items_out + Consumable.items_on_stock) < (Consumable.previous_month_stock * 0.1))
+                           .all())
     
     near_expiration = []
     for c in Consumable.query.all():
@@ -1878,19 +2341,871 @@ def analytics():
             except ValueError:
                 continue
     
-    # Top consumed items (top 5)
+    recent_borrows = (db.session.query(BorrowLog)
+                     .filter(BorrowLog.borrowed_at >= datetime.combine(thirty_days_ago, datetime.min.time()))
+                     .all())
+    active_borrows = db.session.query(BorrowLog).filter(BorrowLog.returned_at.is_(None)).count()
+    
+    recent_usage = (db.session.query(UsageLog)
+                   .filter(UsageLog.used_at >= datetime.combine(thirty_days_ago, datetime.min.time()))
+                   .all())
+    total_units_consumed_30d = sum(u.quantity_used for u in recent_usage)
+    
+    most_borrowed = (db.session.query(Equipment, func.count(BorrowLog.id).label('borrow_count'))
+                    .join(BorrowLog)
+                    .group_by(Equipment.id)
+                    .order_by(func.count(BorrowLog.id).desc())
+                    .limit(5)
+                    .all())
+    
     top_consumed = (db.session.query(Consumable)
                    .filter(Consumable.units_consumed > 0)
                    .order_by(Consumable.units_consumed.desc())
                    .limit(5)
                    .all())
     
+    all_notes = StudentNote.query.all()
+    pending_notes = StudentNote.query.filter(StudentNote.status == 'pending').all()
+    resolved_notes = StudentNote.query.filter(StudentNote.status == 'resolved').all()
     
-    return render_template('analytics.html',
-                         low_stock=low_stock_consumables,
-                         most_borrowed=most_borrowed,
-                         near_expiration=near_expiration,
-                         top_consumed=top_consumed)  # Top 10 most utilized
+    issues_by_type = {}
+    for note in all_notes:
+        note_type = note.note_type
+        if note_type not in issues_by_type:
+            issues_by_type[note_type] = 0
+        issues_by_type[note_type] += 1
+    
+    total_equipment = Equipment.query.count()
+    total_consumables = Consumable.query.count()
+    total_users = User.query.count()
+    
+    equipment_in_use = (db.session.query(Equipment)
+                       .join(BorrowLog, BorrowLog.equipment_id == Equipment.id)
+                       .filter(BorrowLog.returned_at.is_(None))
+                       .distinct()
+                       .count())
+    
+    # === MAINTENANCE DATA ===
+    all_maintenance = EquipmentMaintenance.query.all()
+    completed_maintenance = [m for m in all_maintenance if m.status == 'completed']
+    scheduled_maintenance = [m for m in all_maintenance if m.status == 'scheduled']
+    
+    # Auto-update overdue status
+    for m in scheduled_maintenance:
+        if m.scheduled_date and m.scheduled_date < current_date:
+            m.status = 'overdue'
+    db.session.commit()
+    
+    # Recalculate after status updates
+    overdue_maintenance = [m for m in all_maintenance if m.status == 'overdue']
+    scheduled_maintenance = [m for m in all_maintenance if m.status == 'scheduled']
+    recent_maintenance = [m for m in all_maintenance if m.created_at and m.created_at.date() >= thirty_days_ago]
+    recent_completed = [m for m in recent_maintenance if m.status == 'completed']
+    
+    # Maintenance by type
+    maintenance_by_type = {}
+    for m in all_maintenance:
+        m_type = m.maintenance_type
+        if m_type not in maintenance_by_type:
+            maintenance_by_type[m_type] = 0
+        maintenance_by_type[m_type] += 1
+    
+    # Total maintenance cost
+    total_maintenance_cost = sum(_to_int(m.cost, 0) for m in completed_maintenance)
+    
+    # Completion rate
+    maintenance_completion_rate = 0
+    if len(all_maintenance) > 0:
+        maintenance_completion_rate = round((len(completed_maintenance) / len(all_maintenance)) * 100, 1)
+    
+    # === BUILD PDF ===
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        leftMargin=18, rightMargin=18, topMargin=24, bottomMargin=18,
+    )
+    
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle(
+        'TitleStyle',
+        parent=styles['Heading1'],
+        fontSize=18,
+        fontName='Helvetica-Bold',
+        textColor=colors.HexColor("#1F2937"),
+        spaceAfter=12,
+    )
+    
+    heading_style = ParagraphStyle(
+        'HeadingStyle',
+        parent=styles['Heading2'],
+        fontSize=12,
+        fontName='Helvetica-Bold',
+        textColor=colors.HexColor("#374151"),
+        spaceAfter=8,
+        spaceBefore=12,
+    )
+    
+    cell_style = ParagraphStyle(
+        'CellStyle',
+        parent=styles['Normal'],
+        fontSize=8,
+        leading=10,
+        wordWrap='CJK',
+    )
+    
+    header_style = ParagraphStyle(
+        'HeaderStyle',
+        parent=styles['Normal'],
+        fontSize=9,
+        leading=11,
+        fontName='Helvetica-Bold',
+        wordWrap='CJK',
+    )
+    
+    def create_paragraph(text, style=None):
+        if style is None:
+            style = cell_style
+        if text is None or text == "":
+            return Paragraph("", style)
+        return Paragraph(str(text), style)
+    
+    def sval(x):
+        return "" if x is None else str(x)
+    
+    elements = []
+    
+    # === TITLE ===
+    elements.append(Paragraph("Lab Analytics Report", title_style))
+    elements.append(Paragraph(f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}", styles["Normal"]))
+    elements.append(Spacer(1, 12))
+    
+    # === OVERALL STATISTICS ===
+    elements.append(Paragraph("Overall Statistics", heading_style))
+    stats_data = [
+        [create_paragraph("Total Equipment", header_style), create_paragraph(str(total_equipment), cell_style)],
+        [create_paragraph("In Use", header_style), create_paragraph(str(equipment_in_use), cell_style)],
+        [create_paragraph("Total Consumables", header_style), create_paragraph(str(total_consumables), cell_style)],
+        [create_paragraph("Total Users", header_style), create_paragraph(str(total_users), cell_style)],
+        [create_paragraph("Active Borrows", header_style), create_paragraph(str(active_borrows), cell_style)],
+    ]
+    stats_table = Table(stats_data, colWidths=[200, 100])
+    stats_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3F4F6")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),
+        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#FAFAFA")]),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D1D5DB")),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    elements.append(stats_table)
+    elements.append(Spacer(1, 12))
+    
+    # === LOW STOCK ALERT ===
+    elements.append(Paragraph("Low Stock Alert (< 10% of Previous Month Stock)", heading_style))
+    if low_stock_consumables:
+        low_stock_data = [
+            [create_paragraph("Item Description", header_style), 
+             create_paragraph("Current Stock", header_style),
+             create_paragraph("Percentage", header_style)]
+        ]
+        for item in low_stock_consumables[:10]:  # Limit to 10 rows
+            current = item.items_out + item.items_on_stock
+            percentage = (current / (item.previous_month_stock or 1)) * 100
+            low_stock_data.append([
+                create_paragraph(sval(item.description)),
+                create_paragraph(sval(current)),
+                create_paragraph(f"{percentage:.1f}%"),
+            ])
+        low_stock_table = Table(low_stock_data, colWidths=[250, 100, 100])
+        low_stock_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#FEE2E2")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#991B1B")),
+            ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+            ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D1D5DB")),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]))
+        elements.append(low_stock_table)
+    else:
+        elements.append(Paragraph("No items with critically low stock.", styles["Normal"]))
+    elements.append(Spacer(1, 12))
+    
+    # === NEAR EXPIRATION ===
+    elements.append(Paragraph("Items Near Expiration (Within 30 Days)", heading_style))
+    if near_expiration:
+        expiration_data = [
+            [create_paragraph("Item Description", header_style), 
+             create_paragraph("Expiration Date", header_style)]
+        ]
+        for item in near_expiration[:10]:  # Limit to 10 rows
+            expiration_data.append([
+                create_paragraph(sval(item.description)),
+                create_paragraph(sval(item.expiration)),
+            ])
+        expiration_table = Table(expiration_data, colWidths=[250, 150])
+        expiration_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#FEF3C7")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#92400E")),
+            ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D1D5DB")),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]))
+        elements.append(expiration_table)
+    else:
+        elements.append(Paragraph("No items near expiration.", styles["Normal"]))
+    elements.append(Spacer(1, 12))
+    
+    # === MOST BORROWED EQUIPMENT ===
+    elements.append(Paragraph("Most Borrowed Equipment (Last 30 Days)", heading_style))
+    if most_borrowed:
+        borrowed_data = [
+            [create_paragraph("Equipment", header_style), 
+             create_paragraph("Borrow Count", header_style)]
+        ]
+        for equipment, count in most_borrowed:
+            borrowed_data.append([
+                create_paragraph(sval(equipment.description)),
+                create_paragraph(sval(count)),
+            ])
+        borrowed_table = Table(borrowed_data, colWidths=[250, 100])
+        borrowed_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#DCFCE7")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#166534")),
+            ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+            ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D1D5DB")),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]))
+        elements.append(borrowed_table)
+    else:
+        elements.append(Paragraph("No borrowing records found.", styles["Normal"]))
+    elements.append(Spacer(1, 12))
+    
+    # === TOP CONSUMED ITEMS ===
+    elements.append(Paragraph("Top Consumed Items (All Time)", heading_style))
+    if top_consumed:
+        consumed_data = [
+            [create_paragraph("Item Description", header_style), 
+             create_paragraph("Units Consumed", header_style)]
+        ]
+        for item in top_consumed:
+            consumed_data.append([
+                create_paragraph(sval(item.description)),
+                create_paragraph(sval(item.units_consumed)),
+            ])
+        consumed_table = Table(consumed_data, colWidths=[250, 100])
+        consumed_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E9D5FF")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#6B21A8")),
+            ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+            ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D1D5DB")),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]))
+        elements.append(consumed_table)
+    else:
+        elements.append(Paragraph("No consumption records found.", styles["Normal"]))
+    elements.append(Spacer(1, 12))
+    
+    # PAGE BREAK
+    elements.append(PageBreak())
+    
+    # === ISSUES & NOTES TRACKING ===
+    elements.append(Paragraph("Student Issues & Notes Tracking", heading_style))
+    
+    issues_stats_data = [
+        [create_paragraph("Total Issues", header_style), create_paragraph(str(len(all_notes)), cell_style)],
+        [create_paragraph("Pending Issues", header_style), create_paragraph(str(len(pending_notes)), cell_style)],
+        [create_paragraph("Resolved Issues", header_style), create_paragraph(str(len(resolved_notes)), cell_style)],
+        [create_paragraph("Resolution Rate", header_style), 
+         create_paragraph(f"{(len(resolved_notes) / (len(all_notes) or 1)) * 100:.1f}%", cell_style)],
+    ]
+    issues_stats_table = Table(issues_stats_data, colWidths=[200, 100])
+    issues_stats_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3F4F6")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),
+        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#FAFAFA")]),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D1D5DB")),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    elements.append(issues_stats_table)
+    elements.append(Spacer(1, 12))
+    
+    # Issues by type
+    if issues_by_type:
+        elements.append(Paragraph("Issues by Type", heading_style))
+        type_data = [
+            [create_paragraph("Issue Type", header_style), 
+             create_paragraph("Count", header_style)]
+        ]
+        for issue_type, count in sorted(issues_by_type.items()):
+            type_data.append([
+                create_paragraph(sval(issue_type)),
+                create_paragraph(sval(count)),
+            ])
+        type_table = Table(type_data, colWidths=[250, 100])
+        type_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3F4F6")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),
+            ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+            ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D1D5DB")),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]))
+        elements.append(type_table)
+        elements.append(Spacer(1, 12))
+    
+    # === EQUIPMENT MAINTENANCE TRACKING ===
+    if session.get('role') in ['admin', 'tech']:
+        elements.append(PageBreak())
+        elements.append(Paragraph("Equipment Maintenance Tracking", heading_style))
+        
+        maintenance_stats_data = [
+            [create_paragraph("Total Maintenance Records", header_style), create_paragraph(str(len(all_maintenance)), cell_style)],
+            [create_paragraph("Completed", header_style), create_paragraph(str(len(completed_maintenance)), cell_style)],
+            [create_paragraph("Scheduled", header_style), create_paragraph(str(len(scheduled_maintenance)), cell_style)],
+            [create_paragraph("Overdue", header_style), create_paragraph(str(len(overdue_maintenance)), cell_style)],
+            [create_paragraph("Completion Rate", header_style), create_paragraph(f"{maintenance_completion_rate}%", cell_style)],
+            [create_paragraph("Total Maintenance Cost", header_style), create_paragraph(f"₱{total_maintenance_cost:,.2f}", cell_style)],
+            [create_paragraph("Completed (Last 30 Days)", header_style), create_paragraph(str(len(recent_completed)), cell_style)],
+        ]
+        maintenance_stats_table = Table(maintenance_stats_data, colWidths=[250, 150])
+        maintenance_stats_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#ECFEFF")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#164E63")),
+            ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#FAFAFA")]),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D1D5DB")),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(maintenance_stats_table)
+        elements.append(Spacer(1, 12))
+        
+        # Maintenance by type
+        if maintenance_by_type:
+            elements.append(Paragraph("Maintenance by Type", heading_style))
+            maint_type_data = [
+                [create_paragraph("Maintenance Type", header_style), 
+                 create_paragraph("Count", header_style)]
+            ]
+            for maint_type, count in sorted(maintenance_by_type.items()):
+                maint_type_data.append([
+                    create_paragraph(maint_type.capitalize()),
+                    create_paragraph(str(count)),
+                ])
+            maint_type_table = Table(maint_type_data, colWidths=[250, 100])
+            maint_type_table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#ECFEFF")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#164E63")),
+                ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D1D5DB")),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ]))
+            elements.append(maint_type_table)
+            elements.append(Spacer(1, 12))
+        
+        # Recent maintenance records
+        if recent_maintenance:
+            elements.append(Paragraph("Recent Maintenance (Last 30 Days)", heading_style))
+            recent_maint_data = [
+                [create_paragraph("Equipment", header_style),
+                 create_paragraph("Type", header_style),
+                 create_paragraph("Scheduled", header_style),
+                 create_paragraph("Status", header_style),
+                 create_paragraph("Cost", header_style)]
+            ]
+            for m in recent_maintenance[:15]:  # Limit to 15 records
+                equipment_desc = m.equipment.description if m.equipment else 'Unknown'
+                recent_maint_data.append([
+                    create_paragraph(equipment_desc),
+                    create_paragraph(m.maintenance_type.capitalize()),
+                    create_paragraph(str(m.scheduled_date)),
+                    create_paragraph(m.status.capitalize()),
+                    create_paragraph(f"₱{m.cost:,.2f}" if m.cost else "N/A"),
+                ])
+            recent_maint_table = Table(recent_maint_data, colWidths=[180, 80, 80, 80, 80])
+            recent_maint_table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#ECFEFF")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#164E63")),
+                ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+                ("FONTSIZE", (0, 0), (-1, -1), 7),
+                ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D1D5DB")),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ]))
+            elements.append(recent_maint_table)
+            elements.append(Spacer(1, 12))
+    
+    # === USAGE SUMMARY ===
+    elements.append(Paragraph("30-Day Usage Summary", heading_style))
+    usage_summary_data = [
+        [create_paragraph("Metric", header_style), create_paragraph("Value", header_style)],
+        [create_paragraph("Equipment Borrowing Events", cell_style), create_paragraph(str(len(recent_borrows)), cell_style)],
+        [create_paragraph("Consumable Usage Events", cell_style), create_paragraph(str(len(recent_usage)), cell_style)],
+        [create_paragraph("Total Units Consumed", cell_style), create_paragraph(str(total_units_consumed_30d), cell_style)],
+    ]
+    usage_summary_table = Table(usage_summary_data, colWidths=[250, 100])
+    usage_summary_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3F4F6")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),
+        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+        ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#FAFAFA")]),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D1D5DB")),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    elements.append(usage_summary_table)
+    
+    # Build the PDF document
+    doc.build(elements)
+    buffer.seek(0)
+    
+    filename = f"analytics_report_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.pdf"
+    return send_file(
+        buffer,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=filename
+    )
+
+@app.route('/backup')
+def backup_database():
+    if session.get('role') != 'admin':
+        return redirect(url_for('dashboard'))
+    
+    db_path = os.path.join(basedir, "instance", "database.db")
+    if os.path.exists(db_path):
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        return send_file(db_path, as_attachment=True, download_name=f"backup_cmt_inventory_{timestamp}.db")
+    else:
+        return "Database file not found", 404
+
+# ========== EQUIPMENT MAINTENANCE ROUTES ==========
+@app.route('/maintenance')
+def maintenance():
+    if session.get('role') not in ['admin', 'tech']:
+        return redirect(url_for('dashboard'))
+    
+    from datetime import date
+    
+    q = request.args.get('q', '').strip()
+    sort = request.args.get('sort', 'scheduled_date')
+    direction = request.args.get('dir', 'desc').lower()
+    direction = 'desc' if direction == 'desc' else 'asc'
+    status_filter = request.args.get('status', 'all')  # all, scheduled, completed, overdue
+    type_filter = request.args.get('type', 'all')  # all, calibration, repair, preventive, inspection
+    
+    sortable_fields = {
+        'equipment', 'maintenance_type', 'scheduled_date', 'completed_date', 
+        'performed_by', 'cost', 'status', 'created_at'
+    }
+    if sort not in sortable_fields:
+        sort = 'scheduled_date'
+    
+    # Build query with joins
+    query = EquipmentMaintenance.query.outerjoin(Equipment)
+    
+    # Search filter
+    if q:
+        like = f"%{q}%"
+        query = query.filter(or_(
+            Equipment.description.ilike(like),
+            EquipmentMaintenance.maintenance_type.ilike(like),
+            EquipmentMaintenance.performed_by.ilike(like),
+            EquipmentMaintenance.notes.ilike(like),
+        ))
+    
+    # Status filter
+    if status_filter != 'all':
+        query = query.filter(EquipmentMaintenance.status == status_filter)
+    
+    # Type filter
+    if type_filter != 'all':
+        query = query.filter(EquipmentMaintenance.maintenance_type == type_filter)
+    
+    # Sorting
+    if sort == 'equipment':
+        sort_col = Equipment.description
+    else:
+        sort_col = getattr(EquipmentMaintenance, sort)
+    
+    query = query.order_by(sort_col.desc() if direction == 'desc' else sort_col.asc())
+    
+    records = query.all()
+    
+    # Update overdue status for scheduled items past due date
+    today = date.today()
+    for record in records:
+        if record.status == 'scheduled' and record.scheduled_date < today:
+            record.status = 'overdue'
+    db.session.commit()
+    
+    return render_template('maintenance.html', 
+                         records=records, 
+                         q=q, 
+                         sort=sort, 
+                         dir=direction,
+                         status_filter=status_filter,
+                         type_filter=type_filter)
+
+@app.route('/maintenance/add', methods=['GET', 'POST'])
+def add_maintenance():
+    if session.get('role') not in ['admin', 'tech']:
+        return redirect(url_for('dashboard'))
+    
+    if request.method == 'POST':
+        from datetime import datetime
+        
+        scheduled_date = request.form.get('scheduled_date')
+        
+        record = EquipmentMaintenance(
+            equipment_id=request.form['equipment_id'],
+            maintenance_type=request.form['maintenance_type'],
+            scheduled_date=datetime.strptime(scheduled_date, '%Y-%m-%d').date(),
+            performed_by=request.form.get('performed_by'),
+            notes=request.form.get('notes'),
+            cost=float(request.form.get('cost', 0.0) or 0.0),
+            status='scheduled',
+            created_by=session['user_id']
+        )
+        db.session.add(record)
+        db.session.commit()
+        return redirect(url_for('maintenance'))
+    
+    equipment_list = Equipment.query.order_by(Equipment.description).all()
+    return render_template('add_maintenance.html', equipment=equipment_list)
+
+@app.route('/maintenance/edit/<int:id>', methods=['GET', 'POST'])
+def edit_maintenance(id):
+    if session.get('role') not in ['admin', 'tech']:
+        return redirect(url_for('dashboard'))
+    
+    record = EquipmentMaintenance.query.get_or_404(id)
+    
+    if request.method == 'POST':
+        from datetime import datetime
+        
+        scheduled_date = request.form.get('scheduled_date')
+        completed_date = request.form.get('completed_date')
+        
+        record.equipment_id = request.form['equipment_id']
+        record.maintenance_type = request.form['maintenance_type']
+        record.scheduled_date = datetime.strptime(scheduled_date, '%Y-%m-%d').date()
+        
+        if completed_date:
+            record.completed_date = datetime.strptime(completed_date, '%Y-%m-%d').date()
+            record.status = 'completed'
+        else:
+            record.completed_date = None
+            # Update status based on scheduled date
+            from datetime import date
+            if record.scheduled_date < date.today():
+                record.status = 'overdue'
+            else:
+                record.status = 'scheduled'
+        
+        record.performed_by = request.form.get('performed_by')
+        record.notes = request.form.get('notes')
+        record.cost = float(request.form.get('cost', 0.0) or 0.0)
+        
+        db.session.commit()
+        return redirect(url_for('maintenance'))
+    
+    equipment_list = Equipment.query.order_by(Equipment.description).all()
+    return render_template('edit_maintenance.html', record=record, equipment=equipment_list)
+
+@app.route('/maintenance/complete/<int:id>', methods=['POST'])
+def complete_maintenance(id):
+    if session.get('role') not in ['admin', 'tech']:
+        return redirect(url_for('dashboard'))
+    
+    from datetime import date
+    
+    record = EquipmentMaintenance.query.get_or_404(id)
+    record.status = 'completed'
+    record.completed_date = date.today()
+    
+    # Optionally update performed_by if provided
+    performed_by = request.form.get('performed_by')
+    if performed_by:
+        record.performed_by = performed_by
+    
+    db.session.commit()
+    return redirect(url_for('maintenance'))
+
+@app.route('/maintenance/delete/<int:id>', methods=['POST'])
+def delete_maintenance(id):
+    if session.get('role') not in ['admin', 'tech']:
+        return redirect(url_for('dashboard'))
+    
+    record = EquipmentMaintenance.query.get_or_404(id)
+    db.session.delete(record)
+    db.session.commit()
+    return redirect(url_for('maintenance'))
+
+
+# ==================== BARCODE FUNCTIONS ====================
+
+def generate_barcode_string(prefix, item_id):
+    """Generate a unique barcode string for an item."""
+    random_suffix = uuid.uuid4().hex[:4].upper()
+    return f"{prefix}-{item_id:04d}-{random_suffix}"
+
+def ensure_equipment_barcode(equipment):
+    """Ensure equipment has a barcode, generate one if missing."""
+    if not equipment.barcode:
+        equipment.barcode = generate_barcode_string("EQ", equipment.id)
+        db.session.commit()
+    return equipment.barcode
+
+def ensure_consumable_barcode(consumable):
+    """Ensure consumable has a barcode, generate one if missing."""
+    if not consumable.barcode:
+        consumable.barcode = generate_barcode_string("CON", consumable.id)
+        db.session.commit()
+    return consumable.barcode
+
+
+# ==================== BARCODE ROUTES ====================
+
+@app.route('/barcode/equipment/<int:id>')
+def get_equipment_barcode(id):
+    """Generate and return barcode image for equipment."""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    equipment = Equipment.query.get_or_404(id)
+    barcode_value = ensure_equipment_barcode(equipment)
+    
+    # Generate barcode image
+    CODE128 = barcode.get_barcode_class('code128')
+    buffer = io.BytesIO()
+    
+    # Create barcode with ImageWriter for PNG output
+    ean = CODE128(barcode_value, writer=ImageWriter())
+    ean.write(buffer, options={
+        'module_width': 0.4,
+        'module_height': 15.0,
+        'font_size': 10,
+        'text_distance': 5.0,
+        'quiet_zone': 6.5
+    })
+    
+    buffer.seek(0)
+    return send_file(buffer, mimetype='image/png', as_attachment=False)
+
+
+@app.route('/barcode/equipment/<int:id>/svg')
+def get_equipment_barcode_svg(id):
+    """Generate and return barcode SVG for equipment."""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    equipment = Equipment.query.get_or_404(id)
+    barcode_value = ensure_equipment_barcode(equipment)
+    
+    # Generate barcode SVG
+    CODE128 = barcode.get_barcode_class('code128')
+    buffer = io.BytesIO()
+    
+    ean = CODE128(barcode_value, writer=SVGWriter())
+    ean.write(buffer, options={
+        'module_width': 0.4,
+        'module_height': 15.0,
+        'font_size': 10,
+        'text_distance': 5.0,
+        'quiet_zone': 6.5
+    })
+    
+    buffer.seek(0)
+    return send_file(buffer, mimetype='image/svg+xml', as_attachment=False)
+
+
+@app.route('/barcode/consumable/<int:id>')
+def get_consumable_barcode(id):
+    """Generate and return barcode image for consumable."""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    consumable = Consumable.query.get_or_404(id)
+    barcode_value = ensure_consumable_barcode(consumable)
+    
+    # Generate barcode image
+    CODE128 = barcode.get_barcode_class('code128')
+    buffer = io.BytesIO()
+    
+    ean = CODE128(barcode_value, writer=ImageWriter())
+    ean.write(buffer, options={
+        'module_width': 0.4,
+        'module_height': 15.0,
+        'font_size': 10,
+        'text_distance': 5.0,
+        'quiet_zone': 6.5
+    })
+    
+    buffer.seek(0)
+    return send_file(buffer, mimetype='image/png', as_attachment=False)
+
+
+@app.route('/barcode/consumable/<int:id>/svg')
+def get_consumable_barcode_svg(id):
+    """Generate and return barcode SVG for consumable."""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    consumable = Consumable.query.get_or_404(id)
+    barcode_value = ensure_consumable_barcode(consumable)
+    
+    # Generate barcode SVG
+    CODE128 = barcode.get_barcode_class('code128')
+    buffer = io.BytesIO()
+    
+    ean = CODE128(barcode_value, writer=SVGWriter())
+    ean.write(buffer, options={
+        'module_width': 0.4,
+        'module_height': 15.0,
+        'font_size': 10,
+        'text_distance': 5.0,
+        'quiet_zone': 6.5
+    })
+    
+    buffer.seek(0)
+    return send_file(buffer, mimetype='image/svg+xml', as_attachment=False)
+
+
+@app.route('/barcode/lookup', methods=['GET'])
+def barcode_lookup():
+    """Look up an item by its barcode value."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    barcode_value = request.args.get('code', '').strip()
+    
+    if not barcode_value:
+        return jsonify({'error': 'No barcode provided'}), 400
+    
+    # Try to find in equipment
+    equipment = Equipment.query.filter_by(barcode=barcode_value).first()
+    if equipment:
+        return jsonify({
+            'found': True,
+            'type': 'equipment',
+            'id': equipment.id,
+            'description': equipment.description,
+            'barcode': equipment.barcode,
+            'url': url_for('edit_equipment', id=equipment.id),
+            'borrow_url': url_for('borrow_equipment_row', id=equipment.id)
+        })
+    
+    # Try to find in consumables
+    consumable = Consumable.query.filter_by(barcode=barcode_value).first()
+    if consumable:
+        return jsonify({
+            'found': True,
+            'type': 'consumable',
+            'id': consumable.id,
+            'description': consumable.description,
+            'barcode': consumable.barcode,
+            'url': url_for('edit_consumable', id=consumable.id),
+            'use_url': url_for('use_consumable_row', id=consumable.id)
+        })
+    
+    return jsonify({
+        'found': False,
+        'message': f'No item found with barcode: {barcode_value}'
+    })
+
+
+@app.route('/barcode/equipment/<int:id>/regenerate', methods=['POST'])
+def regenerate_equipment_barcode(id):
+    """Regenerate barcode for equipment."""
+    if session.get('role') not in ['admin', 'tech']:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    equipment = Equipment.query.get_or_404(id)
+    equipment.barcode = generate_barcode_string("EQ", equipment.id)
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'barcode': equipment.barcode,
+        'barcode_url': url_for('get_equipment_barcode', id=equipment.id)
+    })
+
+
+@app.route('/barcode/consumable/<int:id>/regenerate', methods=['POST'])
+def regenerate_consumable_barcode(id):
+    """Regenerate barcode for consumable."""
+    if session.get('role') not in ['admin', 'tech']:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    consumable = Consumable.query.get_or_404(id)
+    consumable.barcode = generate_barcode_string("CON", consumable.id)
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'barcode': consumable.barcode,
+        'barcode_url': url_for('get_consumable_barcode', id=consumable.id)
+    })
+
+
+@app.route('/barcode/print/equipment/<int:id>')
+def print_equipment_barcode(id):
+    """Render printable barcode page for equipment."""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    equipment = Equipment.query.get_or_404(id)
+    ensure_equipment_barcode(equipment)
+    
+    return render_template('print_barcode.html', 
+                           item=equipment, 
+                           item_type='equipment',
+                           barcode_url=url_for('get_equipment_barcode', id=id))
+
+
+@app.route('/barcode/print/consumable/<int:id>')
+def print_consumable_barcode(id):
+    """Render printable barcode page for consumable."""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    consumable = Consumable.query.get_or_404(id)
+    ensure_consumable_barcode(consumable)
+    
+    return render_template('print_barcode.html', 
+                           item=consumable, 
+                           item_type='consumable',
+                           barcode_url=url_for('get_consumable_barcode', id=id))
+
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    # Use 0.0.0.0 to be accessible from other devices if needed, 
+    # but strictly localhost is safer for a standalone app.
+    app.run(debug=True, host='0.0.0.0', port=5000)

@@ -2,3 +2,6 @@ flask==2.2.5
 flask_sqlalchemy==3.0.5
 werkzeug==3.0.1
 sqlalchemy==2.0.38
+python-barcode==0.15.1
+Pillow>=9.0.0
+pyzbar>=0.1.9

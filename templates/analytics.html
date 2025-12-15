@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% block content %}
 
+<!-- Chart.js Library -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <!-- Analytics Header -->
 <div class="bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl shadow-xl text-white p-8 mb-8">
   <div class="flex items-center justify-between flex-wrap gap-4">
@@ -8,18 +11,93 @@
       <h1 class="text-3xl font-bold mb-2">Lab Analytics Dashboard</h1>
       <p class="text-blue-100 text-lg">Equipment and consumable usage insights</p>
     </div>
-    <div class="hidden md:block">
-      <div class="h-16 w-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
-        <svg class="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+    <div class="flex items-center gap-3">
+      <a href="{{ url_for('export_analytics_pdf') }}" class="bg-white text-blue-600 px-4 py-2 rounded-lg font-semibold hover:bg-blue-50 transition flex items-center gap-2">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
         </svg>
+        Export PDF
+      </a>
+      <div class="hidden md:block">
+        <div class="h-16 w-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
+          <svg class="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+          </svg>
+        </div>
       </div>
     </div>
   </div>
 </div>
 
+<!-- Overall Statistics Row -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+  <!-- Total Equipment -->
+  <div class="bg-white rounded-lg shadow-md border-l-4 border-blue-500 p-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-gray-500 text-sm font-medium">Total Equipment</p>
+        <p class="text-3xl font-bold text-gray-900">{{ total_equipment }}</p>
+      </div>
+      <div class="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
+        <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+        </svg>
+      </div>
+    </div>
+    <p class="text-xs text-gray-500 mt-2">{{ equipment_in_use }} currently in use</p>
+  </div>
+
+  <!-- Total Consumables -->
+  <div class="bg-white rounded-lg shadow-md border-l-4 border-purple-500 p-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-gray-500 text-sm font-medium">Total Consumables</p>
+        <p class="text-3xl font-bold text-gray-900">{{ total_consumables }}</p>
+      </div>
+      <div class="h-12 w-12 bg-purple-100 rounded-full flex items-center justify-center">
+        <svg class="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20H4a2 2 0 01-2-2V9.414a1 1 0 01.293-.707l5.414-5.414a1 1 0 01.707-.293H20a2 2 0 012 2v13a2 2 0 01-2 2h-3"/>
+        </svg>
+      </div>
+    </div>
+    <p class="text-xs text-gray-500 mt-2">Tracked items</p>
+  </div>
+
+  <!-- Total Users -->
+  <div class="bg-white rounded-lg shadow-md border-l-4 border-green-500 p-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-gray-500 text-sm font-medium">Total Users</p>
+        <p class="text-3xl font-bold text-gray-900">{{ total_users }}</p>
+      </div>
+      <div class="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center">
+        <svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3.414a2 2 0 01-2-2V4.414A2 2 0 013.414 2H21a2 2 0 012 2v13.172a2 2 0 01-2 2z"/>
+        </svg>
+      </div>
+    </div>
+    <p class="text-xs text-gray-500 mt-2">System users</p>
+  </div>
+
+  <!-- Active Borrows -->
+  <div class="bg-white rounded-lg shadow-md border-l-4 border-orange-500 p-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-gray-500 text-sm font-medium">Active Borrows</p>
+        <p class="text-3xl font-bold text-gray-900">{{ active_borrows }}</p>
+      </div>
+      <div class="h-12 w-12 bg-orange-100 rounded-full flex items-center justify-center">
+        <svg class="h-6 w-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+        </svg>
+      </div>
+    </div>
+    <p class="text-xs text-gray-500 mt-2">Not yet returned</p>
+  </div>
+</div>
+
 <!-- Analytics Cards Grid -->
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
 
   <!-- Low Stock Alert -->
   <div class="bg-white rounded-xl shadow-lg border border-red-100 p-6">
@@ -31,10 +109,10 @@
       </div>
       <h2 class="text-xl font-semibold text-gray-900">Low Stock Alert</h2>
     </div>
-    <p class="text-sm text-gray-600 mb-4">Items below 10% of total stock</p>
+    <p class="text-sm text-gray-600 mb-4">Items with total available stock &lt; 10% of previous month</p>
     
     {% if low_stock %}
-      <div class="space-y-2">
+      <div class="space-y-2 max-h-64 overflow-y-auto">
         {% for item in low_stock %}
         <div class="flex justify-between items-center p-3 bg-red-50 rounded-lg border border-red-200">
           <div>
@@ -42,8 +120,8 @@
             <div class="text-sm text-gray-600">{{ item.unit }}</div>
           </div>
           <div class="text-right">
-            <div class="text-red-600 font-semibold">{{ item.items_on_stock or 0 }}</div>
-            <div class="text-xs text-gray-500">of {{ item.previous_month_stock or 0 }}</div>
+            <div class="text-red-600 font-semibold">{{ (item.items_out or 0) + (item.items_on_stock or 0) }}</div>
+            <div class="text-xs text-gray-500">of {{ item.previous_month_stock or 0 }} ({{ ((item.items_out or 0) + (item.items_on_stock or 0)) / (item.previous_month_stock or 1) * 100 | round(1) }}%)</div>
           </div>
         </div>
         {% endfor %}
@@ -66,19 +144,39 @@
     <p class="text-sm text-gray-600 mb-4">Top 5 most requested items</p>
     
     {% if most_borrowed %}
-      <div class="space-y-2">
-        {% for equipment, count in most_borrowed %}
-        <div class="flex justify-between items-center p-3 bg-green-50 rounded-lg border border-green-200">
-          <div>
-            <div class="font-medium text-gray-900">{{ equipment.description }}</div>
-            <div class="text-sm text-gray-600">{{ equipment.brand_name or 'N/A' }}</div>
-          </div>
-          <div class="bg-green-500 text-white px-3 py-1 rounded-full text-sm font-semibold">
-            {{ count }} borrows
-          </div>
-        </div>
-        {% endfor %}
+      <div style="position: relative; height: 300px;">
+        <canvas id="borrowedEquipmentChart"></canvas>
       </div>
+      <script>
+        const borrowedCtx = document.getElementById('borrowedEquipmentChart').getContext('2d');
+        const borrowedData = {
+          labels: [{% for equipment, count in most_borrowed %}'{{ equipment.description }}'{{ ", " if not loop.last else "" }}{% endfor %}],
+          datasets: [{
+            label: 'Number of Borrows',
+            data: [{% for equipment, count in most_borrowed %}{{ count }}{{ ", " if not loop.last else "" }}{% endfor %}],
+            backgroundColor: 'rgba(34, 197, 94, 0.8)',
+            borderColor: 'rgba(22, 163, 74, 1)',
+            borderWidth: 2,
+            borderRadius: 8,
+            hoverBackgroundColor: 'rgba(22, 163, 74, 1)'
+          }]
+        };
+        new Chart(borrowedCtx, {
+          type: 'bar',
+          data: borrowedData,
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            indexAxis: 'y',
+            plugins: {
+              legend: { display: false }
+            },
+            scales: {
+              x: { beginAtZero: true, ticks: { stepSize: 1 } }
+            }
+          }
+        });
+      </script>
     {% else %}
       <p class="text-gray-500 italic">No borrowing data available</p>
     {% endif %}
@@ -129,19 +227,39 @@
     <p class="text-sm text-gray-600 mb-4">Most used consumables</p>
     
     {% if top_consumed %}
-      <div class="space-y-2">
-        {% for item in top_consumed %}
-        <div class="flex justify-between items-center p-3 bg-purple-50 rounded-lg border border-purple-200">
-          <div>
-            <div class="font-medium text-gray-900">{{ item.description }}</div>
-            <div class="text-sm text-gray-600">{{ item.unit }}</div>
-          </div>
-          <div class="bg-purple-500 text-white px-3 py-1 rounded-full text-sm font-semibold">
-            {{ item.units_consumed or 0 }} used
-          </div>
-        </div>
-        {% endfor %}
+      <div style="position: relative; height: 300px;">
+        <canvas id="consumedItemsChart"></canvas>
       </div>
+      <script>
+        const consumedCtx = document.getElementById('consumedItemsChart').getContext('2d');
+        const consumedData = {
+          labels: [{% for item in top_consumed %}'{{ item.description }}'{{ ", " if not loop.last else "" }}{% endfor %}],
+          datasets: [{
+            label: 'Units Consumed',
+            data: [{% for item in top_consumed %}{{ item.units_consumed or 0 }}{{ ", " if not loop.last else "" }}{% endfor %}],
+            backgroundColor: 'rgba(168, 85, 247, 0.8)',
+            borderColor: 'rgba(126, 34, 206, 1)',
+            borderWidth: 2,
+            borderRadius: 8,
+            hoverBackgroundColor: 'rgba(126, 34, 206, 1)'
+          }]
+        };
+        new Chart(consumedCtx, {
+          type: 'bar',
+          data: consumedData,
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            indexAxis: 'y',
+            plugins: {
+              legend: { display: false }
+            },
+            scales: {
+              x: { beginAtZero: true, ticks: { stepSize: 1 } }
+            }
+          }
+        });
+      </script>
     {% else %}
       <p class="text-gray-500 italic">No consumption data available</p>
     {% endif %}
@@ -149,5 +267,353 @@
 
 </div>
 
+<!-- Usage Trends Section -->
+<div class="bg-white rounded-xl shadow-lg border border-blue-100 p-6 mb-8">
+  <div class="flex items-center mb-6">
+    <div class="h-10 w-10 bg-blue-500 rounded-lg flex items-center justify-center mr-3">
+      <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+      </svg>
+    </div>
+    <h2 class="text-xl font-semibold text-gray-900">Usage Trends (Last 30 Days)</h2>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Equipment Borrowing Chart -->
+    <div class="border rounded-lg p-4 bg-blue-50">
+      <h3 class="font-semibold text-gray-900 mb-3">Equipment Borrowing Activity</h3>
+      <div class="mb-3 space-y-2">
+        <div class="flex justify-between">
+          <span class="text-gray-600">Total Transactions</span>
+          <span class="text-lg font-bold text-blue-600">{{ borrow_count_30d }}</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-gray-600">Currently Active</span>
+          <span class="text-lg font-bold text-green-600">{{ active_borrows }}</span>
+        </div>
+      </div>
+      <div style="position: relative; height: 200px;">
+        <canvas id="borrowingTrendChart"></canvas>
+      </div>
+      <script>
+        const borrowTrendCtx = document.getElementById('borrowingTrendChart').getContext('2d');
+        const dailyBorrowsData = {{ daily_borrows | tojson }};
+        const days = [];
+        const borrowCounts = [];
+        
+        // Create labels and data from daily_borrows
+        const sortedDates = Object.keys(dailyBorrowsData).sort();
+        sortedDates.forEach(dateStr => {
+          const date = new Date(dateStr);
+          days.push((date.getMonth() + 1) + '/' + date.getDate());
+          borrowCounts.push(dailyBorrowsData[dateStr]);
+        });
+        
+        new Chart(borrowTrendCtx, {
+          type: 'line',
+          data: {
+            labels: days,
+            datasets: [{
+              label: 'Students Who Borrowed Per Day',
+              data: borrowCounts,
+              borderColor: 'rgba(59, 130, 246, 1)',
+              backgroundColor: 'rgba(59, 130, 246, 0.1)',
+              borderWidth: 2,
+              fill: true,
+              tension: 0.4,
+              pointRadius: 3,
+              pointBackgroundColor: 'rgba(59, 130, 246, 1)',
+              pointHoverRadius: 5
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { 
+              y: { beginAtZero: true, ticks: { stepSize: 1 } },
+              x: { ticks: { autoSkip: true, maxRotation: 45, minRotation: 0 } }
+            }
+          }
+        });
+      </script>
+    </div>
+
+    <!-- Consumable Usage Chart -->
+    <div class="border rounded-lg p-4 bg-purple-50">
+      <h3 class="font-semibold text-gray-900 mb-3">Consumable Usage Activity</h3>
+      <div class="mb-3 space-y-2">
+        <div class="flex justify-between">
+          <span class="text-gray-600">Total Transactions</span>
+          <span class="text-lg font-bold text-purple-600">{{ usage_count_30d }}</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-gray-600">Total Units Consumed</span>
+          <span class="text-lg font-bold text-orange-600">{{ total_units_consumed_30d }}</span>
+        </div>
+      </div>
+      <div style="position: relative; height: 200px;">
+        <canvas id="consumptionTrendChart"></canvas>
+      </div>
+      <script>
+        const consumptionTrendCtx = document.getElementById('consumptionTrendChart').getContext('2d');
+        const dailyUsageData = {{ daily_usage | tojson }};
+        const days2 = [];
+        const consumptionCounts = [];
+        
+        // Create labels and data from daily_usage
+        const sortedDates2 = Object.keys(dailyUsageData).sort();
+        sortedDates2.forEach(dateStr => {
+          const date = new Date(dateStr);
+          days2.push((date.getMonth() + 1) + '/' + date.getDate());
+          consumptionCounts.push(dailyUsageData[dateStr]);
+        });
+        
+        new Chart(consumptionTrendCtx, {
+          type: 'line',
+          data: {
+            labels: days2,
+            datasets: [{
+              label: 'Students Who Used Consumables Per Day',
+              data: consumptionCounts,
+              borderColor: 'rgba(168, 85, 247, 1)',
+              backgroundColor: 'rgba(168, 85, 247, 0.1)',
+              borderWidth: 2,
+              fill: true,
+              tension: 0.4,
+              pointRadius: 3,
+              pointBackgroundColor: 'rgba(168, 85, 247, 1)',
+              pointHoverRadius: 5
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { 
+              y: { beginAtZero: true, ticks: { stepSize: 1 } },
+              x: { ticks: { autoSkip: true, maxRotation: 45, minRotation: 0 } }
+            }
+          }
+        });
+      </script>
+    </div>
+  </div>
+</div>
+
+<!-- Issues & Notes Trends Section -->
+<div class="bg-white rounded-xl shadow-lg border border-red-100 p-6 mb-8">
+  <div class="flex items-center mb-6">
+    <div class="h-10 w-10 bg-red-500 rounded-lg flex items-center justify-center mr-3">
+      <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+    </div>
+    <h2 class="text-xl font-semibold text-gray-900">Student Issues & Notes Tracking</h2>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <!-- Total Notes -->
+    <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+      <p class="text-gray-600 text-sm">Total Issues Reported</p>
+      <p class="text-3xl font-bold text-gray-900">{{ all_notes_count }}</p>
+    </div>
+
+    <!-- Pending Notes -->
+    <div class="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+      <p class="text-gray-600 text-sm">Pending Resolution</p>
+      <p class="text-3xl font-bold text-yellow-600">{{ pending_notes_count }}</p>
+      <p class="text-xs text-gray-500 mt-1">Recent: {{ recent_pending_count }}</p>
+    </div>
+
+    <!-- Resolved Notes -->
+    <div class="bg-green-50 rounded-lg p-4 border border-green-200">
+      <p class="text-gray-600 text-sm">Resolved Issues</p>
+      <p class="text-3xl font-bold text-green-600">{{ resolved_notes_count }}</p>
+    </div>
+
+    <!-- Resolution Rate -->
+    <div class="bg-blue-50 rounded-lg p-4 border border-blue-200">
+      <p class="text-gray-600 text-sm">Resolution Rate</p>
+      {% if all_notes_count > 0 %}
+        <p class="text-3xl font-bold text-blue-600">{{ (resolved_notes_count / all_notes_count * 100) | round(1) }}%</p>
+      {% else %}
+        <p class="text-3xl font-bold text-blue-600">N/A</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Issues by Type -->
+  {% if issues_by_type %}
+  <div class="mb-6">
+    <h3 class="font-semibold text-gray-900 mb-3">Issues by Type</h3>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      {% for issue_type, count in issues_by_type.items() %}
+      <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+        <span class="text-gray-700 capitalize">{{ issue_type }}</span>
+        <span class="bg-gray-200 text-gray-800 px-3 py-1 rounded-full text-sm font-semibold">{{ count }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Recent Issues -->
+  {% if recent_issues %}
+  <div>
+    <h3 class="font-semibold text-gray-900 mb-3">Recent Issues (Last 30 Days)</h3>
+    <div class="space-y-2 max-h-48 overflow-y-auto">
+      {% for note in recent_issues %}
+      <div class="flex items-start justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+        <div class="flex-1">
+          <div class="font-medium text-gray-900">{{ note.description }}</div>
+          <div class="text-sm text-gray-600">{{ note.note_type | capitalize }} • {{ note.equipment.description if note.equipment else (note.consumable.description if note.consumable else 'N/A') }}</div>
+        </div>
+        <span class="ml-2 px-2 py-1 rounded text-xs font-semibold {% if note.status == 'pending' %}bg-yellow-100 text-yellow-800{% else %}bg-green-100 text-green-800{% endif %}">
+          {{ note.status | capitalize }}
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% else %}
+    <p class="text-gray-500 italic">No recent issues reported</p>
+  {% endif %}
+</div>
+
+<!-- Maintenance Trends Section -->
+{% if session.role in ['admin', 'tech'] %}
+<div class="bg-white rounded-xl shadow-lg border border-cyan-100 p-6 mb-8">
+  <div class="flex items-center mb-6">
+    <div class="h-10 w-10 bg-cyan-500 rounded-lg flex items-center justify-center mr-3">
+      <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+    </div>
+    <h2 class="text-xl font-semibold text-gray-900">Equipment Maintenance Tracking</h2>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <!-- Total Maintenance -->
+    <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+      <p class="text-gray-600 text-sm">Total Maintenance</p>
+      <p class="text-3xl font-bold text-gray-900">{{ all_maintenance_count }}</p>
+    </div>
+
+    <!-- Overdue Maintenance -->
+    <div class="bg-red-50 rounded-lg p-4 border border-red-200">
+      <p class="text-gray-600 text-sm">Overdue</p>
+      <p class="text-3xl font-bold text-red-600">{{ overdue_maintenance_count }}</p>
+    </div>
+
+    <!-- Scheduled Maintenance -->
+    <div class="bg-blue-50 rounded-lg p-4 border border-blue-200">
+      <p class="text-gray-600 text-sm">Scheduled</p>
+      <p class="text-3xl font-bold text-blue-600">{{ scheduled_maintenance_count }}</p>
+    </div>
+
+    <!-- Completion Rate -->
+    <div class="bg-green-50 rounded-lg p-4 border border-green-200">
+      <p class="text-gray-600 text-sm">Completion Rate</p>
+      <p class="text-3xl font-bold text-green-600">{{ maintenance_completion_rate }}%</p>
+    </div>
+  </div>
+
+  <!-- Maintenance Stats Row -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    <!-- Total Cost -->
+    <div class="bg-purple-50 rounded-lg p-4 border border-purple-200">
+      <p class="text-gray-600 text-sm">Total Maintenance Cost</p>
+      <p class="text-2xl font-bold text-purple-600">₱{{ "{:,.2f}".format(total_maintenance_cost) }}</p>
+      <p class="text-xs text-gray-500 mt-1">Completed maintenance only</p>
+    </div>
+
+    <!-- Recent Completions -->
+    <div class="bg-green-50 rounded-lg p-4 border border-green-200">
+      <p class="text-gray-600 text-sm">Completed (Last 30 Days)</p>
+      <p class="text-2xl font-bold text-green-600">{{ recent_completed_count }}</p>
+    </div>
+  </div>
+
+  <!-- Maintenance by Type -->
+  {% if maintenance_by_type %}
+  <div class="mb-6">
+    <h3 class="font-semibold text-gray-900 mb-3">Maintenance by Type</h3>
+    <div style="position: relative; height: 300px;">
+      <canvas id="maintenanceTypeChart"></canvas>
+    </div>
+    <script>
+      const maintenanceTypeCtx = document.getElementById('maintenanceTypeChart').getContext('2d');
+      const maintenanceTypes = {{ maintenance_by_type.keys() | list | tojson }};
+      const maintenanceCounts = {{ maintenance_by_type.values() | list | tojson }};
+      
+      new Chart(maintenanceTypeCtx, {
+        type: 'doughnut',
+        data: {
+          labels: maintenanceTypes.map(t => t.charAt(0).toUpperCase() + t.slice(1)),
+          datasets: [{
+            data: maintenanceCounts,
+            backgroundColor: [
+              'rgba(59, 130, 246, 0.8)',  // Blue - Calibration
+              'rgba(239, 68, 68, 0.8)',   // Red - Repair
+              'rgba(34, 197, 94, 0.8)',   // Green - Preventive
+              'rgba(168, 85, 247, 0.8)'   // Purple - Inspection
+            ],
+            borderColor: [
+              'rgba(59, 130, 246, 1)',
+              'rgba(239, 68, 68, 1)',
+              'rgba(34, 197, 94, 1)',
+              'rgba(168, 85, 247, 1)'
+            ],
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'right',
+              labels: {
+                padding: 15,
+                font: { size: 12 }
+              }
+            }
+          }
+        }
+      });
+    </script>
+  </div>
+  {% endif %}
+
+  <!-- Recent Maintenance -->
+  {% if recent_maintenance %}
+  <div>
+    <h3 class="font-semibold text-gray-900 mb-3">Recent Maintenance (Last 30 Days)</h3>
+    <div class="space-y-2 max-h-48 overflow-y-auto">
+      {% for m in recent_maintenance %}
+      <div class="flex items-start justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+        <div class="flex-1">
+          <div class="font-medium text-gray-900">{{ m.equipment.description if m.equipment else 'Unknown Equipment' }}</div>
+          <div class="text-sm text-gray-600">{{ m.maintenance_type | capitalize }} • Scheduled: {{ m.scheduled_date }}</div>
+          {% if m.cost %}
+          <div class="text-xs text-gray-500">Cost: ₱{{ "{:,.2f}".format(m.cost) }}</div>
+          {% endif %}
+        </div>
+        <span class="ml-2 px-2 py-1 rounded text-xs font-semibold {% if m.status == 'completed' %}bg-green-100 text-green-800{% elif m.status == 'overdue' %}bg-red-100 text-red-800{% else %}bg-blue-100 text-blue-800{% endif %}">
+          {{ m.status | capitalize }}
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% else %}
+    <p class="text-gray-500 italic">No recent maintenance records</p>
+  {% endif %}
+</div>
+{% endif %}
 
 {% endblock %}

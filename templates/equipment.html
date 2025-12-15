@@ -19,9 +19,9 @@
 
 <!-- Search and Actions Bar -->
 <div class="bg-white rounded-xl shadow-lg border border-green-100 p-6 mb-6 medical-shadow">
-  <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+  <div class="flex flex-col gap-4">
     <!-- Search Form -->
-    <div class="flex-1 max-w-2xl">
+    <div class="flex-1">
       <form method="GET" action="{{ url_for('equipment') }}" class="flex items-center gap-3">
         <div class="relative flex-1">
           <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -50,10 +50,106 @@
       </form>
     </div>
 
-    <!-- Action Buttons -->
+    <!-- Advanced Filters -->
+    <div class="border-t border-gray-200 pt-4">
+      <details class="group">
+        <summary class="cursor-pointer flex items-center gap-2 text-gray-700 hover:text-green-700 font-medium transition-colors py-2">
+          <svg class="h-5 w-5 transform group-open:rotate-90 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+          Advanced Filters
+        </summary>
+        
+        <form method="GET" action="{{ url_for('equipment') }}" class="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <!-- Keep search and sort -->
+          <input type="hidden" name="q" value="{{ q|default('') }}">
+          <input type="hidden" name="sort" value="{{ sort|default('description') }}">
+          <input type="hidden" name="dir" value="{{ dir|default('asc') }}">
+
+          <!-- Brand Filter -->
+          <div class="flex flex-col">
+            <label class="text-sm font-medium text-gray-700 mb-1">Brand</label>
+            <select name="brand" class="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 bg-white">
+              <option value="">All Brands</option>
+              {% for brand in brands %}
+              <option value="{{ brand }}" {% if brand_filter == brand %}selected{% endif %}>{{ brand }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <!-- Location Filter -->
+          <div class="flex flex-col">
+            <label class="text-sm font-medium text-gray-700 mb-1">Location</label>
+            <select name="location" class="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 bg-white">
+              <option value="">All Locations</option>
+              {% for location in locations %}
+              <option value="{{ location }}" {% if location_filter == location %}selected{% endif %}>{{ location }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <!-- Date Purchased From -->
+          <div class="flex flex-col">
+            <label class="text-sm font-medium text-gray-700 mb-1">From Date</label>
+            <input
+              type="date"
+              name="date_from"
+              value="{{ date_from|default('') }}"
+              class="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+            />
+          </div>
+
+          <!-- Date Purchased To -->
+          <div class="flex flex-col">
+            <label class="text-sm font-medium text-gray-700 mb-1">To Date</label>
+            <input
+              type="date"
+              name="date_to"
+              value="{{ date_to|default('') }}"
+              class="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+            />
+          </div>
+
+          <!-- Apply Filters Button -->
+          <div class="flex items-end gap-2">
+            <button type="submit" class="flex-1 bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 font-medium transition duration-200">
+              Apply Filters
+            </button>
+            <a href="{{ url_for('equipment') }}" class="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition duration-200">
+              Reset
+            </a>
+          </div>
+        </form>
+      </details>
+    </div>
+
+    {% if q or location_filter or brand_filter or date_from or date_to %}
+    <div class="flex flex-wrap gap-2 pt-2">
+      {% if q %}<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800"><svg class="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>Search: {{ q }}</span>{% endif %}
+      {% if location_filter %}<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800"><svg class="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>Location: {{ location_filter }}</span>{% endif %}
+      {% if brand_filter %}<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800"><svg class="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>Brand: {{ brand_filter }}</span>{% endif %}
+      {% if date_from %}<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800"><svg class="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>From: {{ date_from }}</span>{% endif %}
+      {% if date_to %}<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800"><svg class="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>To: {{ date_to }}</span>{% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Action Buttons (moved below filters) -->
+  <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pt-4 border-t border-gray-200">
+    <div></div>
     <div class="flex items-center gap-3">
+      <!-- Barcode Scanner -->
+      <button type="button" onclick="openBarcodeScanner()" 
+              class="group flex items-center space-x-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white px-4 py-3 rounded-lg hover:from-purple-700 hover:to-purple-800 font-medium transition duration-200 shadow-lg"
+              title="Scan barcode to quickly find items">
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
+        </svg>
+        <span>Scan Barcode</span>
+      </button>
+
       <!-- Export PDF -->
-      <a href="{{ url_for('export_equipment_pdf', q=q, sort=sort, dir=dir) }}"
+      <a href="{{ url_for('export_equipment_pdf', q=q, sort=sort, dir=dir, location=location_filter, brand=brand_filter, date_from=date_from, date_to=date_to) }}"
          class="group flex items-center space-x-2 bg-gray-700 text-white px-4 py-3 rounded-lg hover:bg-gray-800 font-medium transition duration-200 shadow-lg"
          title="Export current view to PDF">
         <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -81,17 +177,6 @@
       {% endif %}
     </div>
   </div>
-
-  {% if q %}
-  <div class="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-    <p class="text-sm text-green-700">
-      <svg class="inline h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-      </svg>
-      Search results for "<span class="font-semibold">{{ q }}</span>"
-    </p>
-  </div>
-  {% endif %}
 </div>
 
 <!-- Equipment Table -->
@@ -121,6 +206,9 @@
 
           <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
             {{ sort_link('ID', 'id') }}
+          </th>
+          <th class="px-4 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            Barcode
           </th>
           <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
             {{ sort_link('Description', 'description') }}
@@ -165,6 +253,18 @@
             <div class="flex items-center">
               <div class="h-2 w-2 bg-green-500 rounded-full mr-3"></div>
               <span class="text-sm font-semibold text-gray-900">{{ item.id }}</span>
+            </div>
+          </td>
+          <td class="px-4 py-4 whitespace-nowrap">
+            <div class="relative group">
+              <button onclick="showBarcodePopover({{ item.id }}, 'equipment')" 
+                      class="inline-flex items-center px-2 py-1 text-xs font-mono bg-purple-50 text-purple-700 rounded hover:bg-purple-100 transition-colors cursor-pointer"
+                      title="Click to view barcode">
+                <svg class="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
+                </svg>
+                {{ item.barcode[:12] if item.barcode else 'Generate' }}...
+              </button>
             </div>
           </td>
           <td class="px-6 py-4 whitespace-nowrap">
@@ -260,4 +360,87 @@
   {% endif %}
 </div>
 {% endif %}
+
+<!-- Barcode Popover Modal -->
+<div id="barcodePopover" class="fixed inset-0 z-50 hidden">
+  <div class="fixed inset-0 bg-black bg-opacity-50" onclick="closeBarcodePopover()"></div>
+  <div class="fixed inset-0 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden">
+      <div class="px-6 py-4 bg-gradient-to-r from-purple-600 to-purple-700 text-white flex items-center justify-between">
+        <h3 class="font-semibold">Item Barcode</h3>
+        <button onclick="closeBarcodePopover()" class="text-white hover:text-purple-200">
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <div class="p-6 text-center">
+        <img id="barcodeImage" src="" alt="Barcode" class="mx-auto mb-4 max-w-full">
+        <p id="barcodeValue" class="text-sm font-mono text-gray-600 mb-4"></p>
+        <div class="flex justify-center gap-2">
+          <a id="barcodePrintLink" href="#" target="_blank" 
+             class="px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition-colors">
+            🖨️ Print
+          </a>
+          <button onclick="regenerateBarcode()" 
+                  class="px-4 py-2 bg-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-300 transition-colors">
+            🔄 Regenerate
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Barcode Scanner Modal -->
+{% include 'barcode_scanner.html' %}
+
+<script>
+  let currentBarcodeItem = { id: null, type: null };
+  
+  function showBarcodePopover(id, type) {
+    currentBarcodeItem = { id, type };
+    const popover = document.getElementById('barcodePopover');
+    const image = document.getElementById('barcodeImage');
+    const printLink = document.getElementById('barcodePrintLink');
+    
+    image.src = `/barcode/${type}/${id}`;
+    printLink.href = `/barcode/print/${type}/${id}`;
+    
+    // Fetch barcode value
+    fetch(`/barcode/lookup?code=`)
+      .then(() => {
+        // Just show the popover, we'll get barcode from image alt or regenerate
+      });
+    
+    popover.classList.remove('hidden');
+  }
+  
+  function closeBarcodePopover() {
+    document.getElementById('barcodePopover').classList.add('hidden');
+  }
+  
+  function regenerateBarcode() {
+    if (!currentBarcodeItem.id || !currentBarcodeItem.type) return;
+    
+    fetch(`/barcode/${currentBarcodeItem.type}/${currentBarcodeItem.id}/regenerate`, {
+      method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        // Refresh the barcode image
+        const image = document.getElementById('barcodeImage');
+        image.src = data.barcode_url + '?t=' + Date.now();
+        document.getElementById('barcodeValue').textContent = data.barcode;
+        // Reload page to update table
+        setTimeout(() => location.reload(), 500);
+      }
+    })
+    .catch(error => {
+      console.error('Error regenerating barcode:', error);
+      alert('Failed to regenerate barcode');
+    });
+  }
+</script>
 {% endblock %}

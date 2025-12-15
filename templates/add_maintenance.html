@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="max-w-2xl mx-auto">
+  <div class="bg-white rounded-lg shadow-md p-8">
+    <h1 class="text-2xl font-bold text-gray-900 mb-6">Schedule Maintenance</h1>
+    
+    <form method="POST" action="{{ url_for('add_maintenance') }}" class="space-y-4">
+      <!-- Equipment Select -->
+      <div>
+        <label for="equipment_id" class="block text-sm font-medium text-gray-700 mb-1">Equipment *</label>
+        <select name="equipment_id" id="equipment_id" required 
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+          <option value="">-- Select Equipment --</option>
+          {% for item in equipment %}
+          <option value="{{ item.id }}">{{ item.description }} ({{ item.serial_number }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      
+      <!-- Maintenance Type -->
+      <div>
+        <label for="maintenance_type" class="block text-sm font-medium text-gray-700 mb-1">Maintenance Type *</label>
+        <select name="maintenance_type" id="maintenance_type" required 
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+          <option value="calibration">Calibration</option>
+          <option value="repair">Repair</option>
+          <option value="preventive">Preventive Maintenance</option>
+          <option value="inspection">Inspection</option>
+        </select>
+      </div>
+      
+      <!-- Scheduled Date -->
+      <div>
+        <label for="scheduled_date" class="block text-sm font-medium text-gray-700 mb-1">Scheduled Date *</label>
+        <input type="date" name="scheduled_date" id="scheduled_date" required 
+               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+      </div>
+      
+      <!-- Performed By -->
+      <div>
+        <label for="performed_by" class="block text-sm font-medium text-gray-700 mb-1">Technician/Vendor</label>
+        <input type="text" name="performed_by" id="performed_by" placeholder="Enter technician or vendor name"
+               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+      </div>
+      
+      <!-- Cost -->
+      <div>
+        <label for="cost" class="block text-sm font-medium text-gray-700 mb-1">Estimated Cost (₱)</label>
+        <input type="number" name="cost" id="cost" step="0.01" min="0" value="0.00" 
+               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+      </div>
+      
+      <!-- Notes -->
+      <div>
+        <label for="notes" class="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+        <textarea name="notes" id="notes" rows="3" placeholder="Additional details..."
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+      </div>
+      
+      <!-- Buttons -->
+      <div class="flex justify-end gap-3 pt-4">
+        <a href="{{ url_for('maintenance') }}" 
+           class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition">
+          Cancel
+        </a>
+        <button type="submit" 
+                class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition">
+          Schedule Maintenance
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}

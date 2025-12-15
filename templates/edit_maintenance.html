@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="max-w-2xl mx-auto">
+  <div class="bg-white rounded-lg shadow-md p-8">
+    <h1 class="text-2xl font-bold text-gray-900 mb-6">Edit Maintenance Record</h1>
+    
+    <form method="POST" action="{{ url_for('edit_maintenance', id=record.id) }}" class="space-y-4">
+      <!-- Equipment Select -->
+      <div>
+        <label for="equipment_id" class="block text-sm font-medium text-gray-700 mb-1">Equipment *</label>
+        <select name="equipment_id" id="equipment_id" required 
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+          {% for item in equipment %}
+          <option value="{{ item.id }}" {% if item.id == record.equipment_id %}selected{% endif %}>
+            {{ item.description }} ({{ item.serial_number }})
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      
+      <!-- Maintenance Type -->
+      <div>
+        <label for="maintenance_type" class="block text-sm font-medium text-gray-700 mb-1">Maintenance Type *</label>
+        <select name="maintenance_type" id="maintenance_type" required 
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+          <option value="calibration" {% if record.maintenance_type == 'calibration' %}selected{% endif %}>Calibration</option>
+          <option value="repair" {% if record.maintenance_type == 'repair' %}selected{% endif %}>Repair</option>
+          <option value="preventive" {% if record.maintenance_type == 'preventive' %}selected{% endif %}>Preventive Maintenance</option>
+          <option value="inspection" {% if record.maintenance_type == 'inspection' %}selected{% endif %}>Inspection</option>
+        </select>
+      </div>
+      
+      <!-- Scheduled Date -->
+      <div>
+        <label for="scheduled_date" class="block text-sm font-medium text-gray-700 mb-1">Scheduled Date *</label>
+        <input type="date" name="scheduled_date" id="scheduled_date" required 
+               value="{{ record.scheduled_date.strftime('%Y-%m-%d') }}"
+               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+      </div>
+      
+      <!-- Completed Date -->
+      <div>
+        <label for="completed_date" class="block text-sm font-medium text-gray-700 mb-1">Completed Date</label>
+        <input type="date" name="completed_date" id="completed_date" 
+               value="{{ record.completed_date.strftime('%Y-%m-%d') if record.completed_date else '' }}"
+               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+        <p class="text-xs text-gray-500 mt-1">Leave empty if not yet completed</p>
+      </div>
+      
+      <!-- Performed By -->
+      <div>
+        <label for="performed_by" class="block text-sm font-medium text-gray-700 mb-1">Technician/Vendor</label>
+        <input type="text" name="performed_by" id="performed_by" value="{{ record.performed_by or '' }}"
+               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+      </div>
+      
+      <!-- Cost -->
+      <div>
+        <label for="cost" class="block text-sm font-medium text-gray-700 mb-1">Cost (₱)</label>
+        <input type="number" name="cost" id="cost" step="0.01" min="0" value="{{ record.cost or 0.0 }}" 
+               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+      </div>
+      
+      <!-- Notes -->
+      <div>
+        <label for="notes" class="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+        <textarea name="notes" id="notes" rows="3"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">{{ record.notes or '' }}</textarea>
+      </div>
+      
+      <!-- Buttons -->
+      <div class="flex justify-end gap-3 pt-4">
+        <a href="{{ url_for('maintenance') }}" 
+           class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition">
+          Cancel
+        </a>
+        <button type="submit" 
+                class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition">
+          Save Changes
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
