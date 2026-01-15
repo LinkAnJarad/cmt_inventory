@@ -1,9 +1,10 @@
 import os
 import io
 import uuid
+import shutil
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, session, send_file, jsonify
-from models import db, User, Equipment, Consumable, BorrowLog, UsageLog, StudentNote, EquipmentMaintenance
+from models import db, User, Equipment, Consumable, BorrowLog, UsageLog, StudentNote, EquipmentMaintenance, AuditLog
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import or_, func
 
@@ -47,6 +48,22 @@ def _to_int(value, default=0):
 def _clamp_nonneg(x):
     x = _to_int(x, 0)
     return 0 if x < 0 else x
+
+def log_action(action, details=None):
+    """
+    Helper to log user actions to the database.
+    """
+    user_id = session.get('user_id')
+    ip_address = request.remote_addr
+    
+    log_entry = AuditLog(
+        user_id=user_id,
+        action=action,
+        details=details,
+        ip_address=ip_address
+    )
+    db.session.add(log_entry)
+    db.session.commit()
 
 def _expiration_sort_key(exp):
     """
@@ -401,9 +418,11 @@ def login():
         if user and check_password_hash(user.password, password):
             session['user_id'] = user.id
             session['role'] = user.role
+            log_action("Login", f"User {username} logged in successfully")
             return redirect(url_for('dashboard'))
         else:
-            return "Invalid credentials"
+            log_action("Login Failed", f"Attempted login for username: {username}")
+            return render_template('login.html', error="Invalid username or password. Please try again.")
     return render_template('login.html')
 
 @app.route('/dashboard')
@@ -859,9 +878,9 @@ def export_consumables_pdf():
     elements.append(meta)
     elements.append(Spacer(1, 12))
 
-    # Updated headers (removed Test and Total, added Returnable)
+    # Updated headers (removed Test and Total and Returnable)
     headers = [
-        "Description", "Balance Stock", "Unit", "Returnable",
+        "Description", "Balance Stock", "Unit",
         "Expiration", "Lot #", "Date Received", "Items Out",
         "Items In Stock", "Previous Month Stock", "Units Consumed", "Units Expired"
     ]
@@ -881,7 +900,6 @@ def export_consumables_pdf():
             create_paragraph(sval(it.description)),
             create_paragraph(sval(it.balance_stock)),
             create_paragraph(sval(it.unit)),
-            create_paragraph(returnable_text(it.is_returnable)),
             create_paragraph(sval(it.expiration)),
             create_paragraph(sval(it.lot_number)),
             create_paragraph(sval(it.date_received)),
@@ -893,7 +911,7 @@ def export_consumables_pdf():
         ])
 
     # Define column widths (in points) - adjust these based on your content needs
-    col_widths = [120, 60, 40, 50, 60, 60, 70, 50, 60, 80, 70, 70]
+    col_widths = [170, 60, 40, 60, 60, 70, 50, 60, 80, 70, 70]
 
     table = Table(data, repeatRows=1, colWidths=col_widths)
     table.setStyle(TableStyle([
@@ -1143,6 +1161,7 @@ def borrow_equipment():
         )
         db.session.add(log)
         db.session.commit()
+        log_action("Borrow Equipment", f"{log.borrower_name} borrowed {log.quantity_borrowed}x {log.equipment.description}")
         return redirect(url_for('equipment'))
     equipment_list = Equipment.query.all()
     return render_template('borrow_equipment.html', equipment=equipment_list)
@@ -1181,6 +1200,7 @@ def use_consumable():
         recalc_single_row(c)
 
         db.session.commit()
+        log_action("Use Consumable", f"{log.user_name} used {log.quantity_used}x {log.consumable.description}")
         return redirect(url_for('consumables'))
 
     consumables_list = Consumable.query.all()
@@ -1206,6 +1226,7 @@ def borrow_equipment_row(id):
         )
         db.session.add(log)
         db.session.commit()
+        log_action("Borrow Equipment", f"{log.borrower_name} borrowed {log.quantity_borrowed}x {equipment.description}")
         return redirect(url_for('equipment'))
     
     return render_template('borrow_equipment_row.html', equipment=equipment)
@@ -1317,6 +1338,7 @@ def return_consumable(usage_id):
             recalc_single_row(log.consumable)
         
         db.session.commit()
+        log_action("Return Consumable", f"{log.user_name} returned items for {log.consumable.description}")
         return redirect(url_for('history'))
     
     return render_template('return_consumable.html', log=log)
@@ -1354,6 +1376,7 @@ def return_equipment(borrow_id):
             db.session.add(note)
 
         db.session.commit()
+        log_action("Return Equipment", f"{log.borrower_name} returned {log.quantity_borrowed}x {log.equipment.description}")
         return redirect(url_for('history'))
 
     return render_template('return_equipment.html', log=log)
@@ -1449,6 +1472,10 @@ def history():
     if session.get('role') not in ['admin', 'tech']:
         return redirect(url_for('dashboard'))
 
+    # Global date filters
+    start_date = request.args.get('start_date', '')
+    end_date = request.args.get('end_date', '')
+
     # Borrowing table params
     b_q = request.args.get('b_q', '').strip()
     b_sort = request.args.get('b_sort', 'borrowed_at')
@@ -1467,6 +1494,12 @@ def history():
         b_sort = 'borrowed_at'
 
     b_query = BorrowLog.query.outerjoin(Equipment)
+
+    if start_date:
+        b_query = b_query.filter(BorrowLog.borrowed_at >= datetime.strptime(start_date, '%Y-%m-%d'))
+    if end_date:
+        # Include the whole end day
+        b_query = b_query.filter(BorrowLog.borrowed_at <= datetime.strptime(end_date + ' 23:59:59', '%Y-%m-%d %H:%M:%S'))
 
     # Update field references for borrows
     if b_q:
@@ -1494,6 +1527,11 @@ def history():
 
     u_query = UsageLog.query.outerjoin(Consumable)
 
+    if start_date:
+        u_query = u_query.filter(UsageLog.used_at >= datetime.strptime(start_date, '%Y-%m-%d'))
+    if end_date:
+        u_query = u_query.filter(UsageLog.used_at <= datetime.strptime(end_date + ' 23:59:59', '%Y-%m-%d %H:%M:%S'))
+
     # Update field references for usages
     if u_q:
         like = f"%{u_q}%"
@@ -1513,10 +1551,45 @@ def history():
     u_query = u_query.order_by(u_sort_col.desc() if u_dir == 'desc' else u_sort_col.asc())
     usages = u_query.all()
 
+    # Calculate Monthly Usage Summary
+    # Using strftime for grouping - works best with SQLite
+    monthly_usage_stats = db.session.query(
+        func.strftime('%Y-%m', UsageLog.used_at).label('month'),
+        func.sum(UsageLog.quantity_used).label('total_used')
+    ).group_by('month').order_by(func.strftime('%Y-%m', UsageLog.used_at).desc()).all()
+
+    monthly_borrow_stats = db.session.query(
+        func.strftime('%Y-%m', BorrowLog.borrowed_at).label('month'),
+        func.sum(BorrowLog.quantity_borrowed).label('total_borrowed')
+    ).group_by('month').order_by(func.strftime('%Y-%m', BorrowLog.borrowed_at).desc()).all()
+
+    # Combine them for a single table view: {month: {used: X, borrowed: Y}}
+    summary_dict = {}
+    for month, total in monthly_usage_stats:
+        summary_dict[month] = {'used': total, 'borrowed': 0}
+    for month, total in monthly_borrow_stats:
+        if month in summary_dict:
+            summary_dict[month]['borrowed'] = total
+        else:
+            summary_dict[month] = {'used': 0, 'borrowed': total}
+    
+    # Convert to sorted list of objects
+    summary_list = []
+    for m in sorted(summary_dict.keys(), reverse=True):
+        summary_list.append({
+            'month': m,
+            'used': summary_dict[m]['used'],
+            'borrowed': summary_dict[m]['borrowed']
+        })
+
     return render_template(
         'history.html',
         borrows=borrows,
         usages=usages,
+        summary_list=summary_list,
+        # filters
+        start_date=start_date,
+        end_date=end_date,
         # borrow table state
         b_q=b_q, b_sort=b_sort, b_dir=b_dir,
         # usage table state
@@ -1542,6 +1615,10 @@ def export_history_pdf():
         return ("Missing dependency: reportlab. Install it first, e.g. "
                 "`pip install reportlab`"), 500
 
+    # Global filters
+    start_date = request.args.get('start_date', '')
+    end_date = request.args.get('end_date', '')
+
     # Borrowing params
     b_q = request.args.get('b_q', '').strip()
     b_sort = request.args.get('b_sort', 'borrowed_at')
@@ -1554,15 +1631,12 @@ def export_history_pdf():
     u_dir = request.args.get('u_dir', 'desc').lower()
     u_dir = 'desc' if u_dir == 'desc' else 'asc'
 
-    # Build borrows query (updated field names)
-    borrows_sortable = {
-        'borrower_name', 'borrower_type', 'section_course', 'purpose', 
-        'equipment', 'quantity_borrowed', 'borrowed_at', 'returned_at'
-    }
-    if b_sort not in borrows_sortable:
-        b_sort = 'borrowed_at'
-
+    # Build borrows query
     b_query = BorrowLog.query.outerjoin(Equipment)
+    if start_date:
+        b_query = b_query.filter(BorrowLog.borrowed_at >= datetime.strptime(start_date, '%Y-%m-%d'))
+    if end_date:
+        b_query = b_query.filter(BorrowLog.borrowed_at <= datetime.strptime(end_date + ' 23:59:59', '%Y-%m-%d %H:%M:%S'))
 
     if b_q:
         like = f"%{b_q}%"
@@ -1574,23 +1648,16 @@ def export_history_pdf():
             Equipment.description.ilike(like),
         ))
 
-    if b_sort == 'equipment':
-        b_sort_col = Equipment.description
-    else:
-        b_sort_col = getattr(BorrowLog, b_sort)
-
+    b_sort_col = getattr(BorrowLog, b_sort) if b_sort != 'equipment' else Equipment.description
     b_query = b_query.order_by(b_sort_col.desc() if b_dir == 'desc' else b_sort_col.asc())
     borrows = b_query.all()
 
-    # Build usages query (updated field names)
-    usages_sortable = {
-        'user_name', 'user_type', 'section_course', 'purpose', 
-        'consumable', 'quantity_used', 'used_at'
-    }
-    if u_sort not in usages_sortable:
-        u_sort = 'used_at'
-
+    # Build usages query
     u_query = UsageLog.query.outerjoin(Consumable)
+    if start_date:
+        u_query = u_query.filter(UsageLog.used_at >= datetime.strptime(start_date, '%Y-%m-%d'))
+    if end_date:
+        u_query = u_query.filter(UsageLog.used_at <= datetime.strptime(end_date + ' 23:59:59', '%Y-%m-%d %H:%M:%S'))
 
     if u_q:
         like = f"%{u_q}%"
@@ -1602,13 +1669,20 @@ def export_history_pdf():
             Consumable.description.ilike(like),
         ))
 
-    if u_sort == 'consumable':
-        u_sort_col = Consumable.description
-    else:
-        u_sort_col = getattr(UsageLog, u_sort)
-
+    u_sort_col = getattr(UsageLog, u_sort) if u_sort != 'consumable' else Consumable.description
     u_query = u_query.order_by(u_sort_col.desc() if u_dir == 'desc' else u_sort_col.asc())
     usages = u_query.all()
+
+    # Monthly Stats (for summary table in PDF)
+    m_usage = db.session.query(func.strftime('%Y-%m', UsageLog.used_at).label('m'), func.sum(UsageLog.quantity_used)).group_by('m').all()
+    m_borrow = db.session.query(func.strftime('%Y-%m', BorrowLog.borrowed_at).label('m'), func.sum(BorrowLog.quantity_borrowed)).group_by('m').all()
+    
+    s_dict = {}
+    for m, c in m_usage: s_dict[m] = {'u': c, 'b': 0}
+    for m, c in m_borrow:
+        if m in s_dict: s_dict[m]['b'] = c
+        else: s_dict[m] = {'u': 0, 'b': c}
+    summary = [{'m': k, 'u': s_dict[k]['u'], 'b': s_dict[k]['b']} for k in sorted(s_dict.keys(), reverse=True)]
 
     # Build PDF
     buffer = io.BytesIO()
@@ -1650,12 +1724,43 @@ def export_history_pdf():
 
     # Title/meta
     elements.append(Paragraph("Usage & Borrowing History Report", styles["Title"]))
+    if start_date or end_date:
+        range_text = f"Date Range: {start_date or 'Beginning'} to {end_date or 'Present'}"
+        elements.append(Paragraph(range_text, styles["Normal"]))
     elements.append(Spacer(1, 6))
     elements.append(Paragraph(
         f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}",
         styles["Normal"],
     ))
     elements.append(Spacer(1, 12))
+
+    # --- NEW: Monthly Usage Summary Table ---
+    elements.append(Paragraph("Monthly Usage Summary", styles["Heading2"]))
+    elements.append(Spacer(1, 6))
+    
+    summary_headers = [
+        create_paragraph("Month", is_header=True),
+        create_paragraph("Total Items Used (Consumables)", is_header=True),
+        create_paragraph("Total Items Borrowed (Equipment)", is_header=True)
+    ]
+    summary_data_pdf = [summary_headers]
+    for item in summary:
+        summary_data_pdf.append([
+            create_paragraph(item['m']),
+            create_paragraph(item['u']),
+            create_paragraph(item['b'])
+        ])
+    
+    summary_table = Table(summary_data_pdf, colWidths=[150, 250, 250])
+    summary_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3F4F6")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+    ]))
+    elements.append(summary_table)
+    elements.append(Spacer(1, 24))
 
     # Borrowing section
     elements.append(Paragraph("Equipment Borrowing", styles["Heading2"]))
@@ -1717,7 +1822,7 @@ def export_history_pdf():
     # Updated headers for usage
     usage_headers = [
         "User", "Type", "Section + Course", "Purpose",
-        "Consumable", "Returnable", "Quantity Used", "Used At"
+        "Consumable", "Quantity Used", "Used At"
     ]
     
     # Create header row with Paragraph objects
@@ -1725,22 +1830,18 @@ def export_history_pdf():
     usage_data = [usage_header_row]
     
     for log in usages:
-        # Check if consumable is returnable
-        returnable_text = "Yes" if (log.consumable and log.consumable.is_returnable) else "No"
-        
         usage_data.append([
             create_paragraph(sval(log.user_name)),
             create_paragraph(sval(log.user_type.title() if log.user_type else "")),
             create_paragraph(sval(log.section_course)),
             create_paragraph(sval(log.purpose)),
             create_paragraph(sval(log.consumable.description if log.consumable else "—")),
-            create_paragraph(returnable_text),
             create_paragraph(sval(log.quantity_used)),
             create_paragraph(sval(log.used_at)),
         ])
 
     # Define column widths for usage table
-    usage_col_widths = [120, 60, 100, 140, 120, 60, 70, 100]
+    usage_col_widths = [120, 60, 100, 160, 150, 80, 100]
 
     usage_table = Table(usage_data, repeatRows=1, colWidths=usage_col_widths)
     usage_table.setStyle(TableStyle([
@@ -1773,8 +1874,37 @@ def export_history_pdf():
 
 @app.route('/logout')
 def logout():
+    log_action("Logout")
     session.clear()
     return redirect(url_for('login'))
+
+@app.route('/change_password', methods=['GET', 'POST'])
+def change_password():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+        
+    if request.method == 'POST':
+        current_password = request.form['current_password']
+        new_password = request.form['new_password']
+        confirm_password = request.form['confirm_password']
+        
+        user = User.query.get(session['user_id'])
+        
+        if not check_password_hash(user.password, current_password):
+            return render_template('change_password.html', error="Current password is incorrect")
+            
+        if new_password != confirm_password:
+            return render_template('change_password.html', error="New passwords do not match")
+            
+        if len(new_password) < 6:
+            return render_template('change_password.html', error="Password must be at least 6 characters long")
+            
+        user.password = generate_password_hash(new_password)
+        db.session.commit()
+        log_action("Change Password", f"User {user.username} successfully changed their password")
+        return render_template('change_password.html', success="Password updated successfully!")
+        
+    return render_template('change_password.html')
 
 @app.route('/admin/create_user', methods=['GET', 'POST'])
 def create_user():
@@ -1792,6 +1922,7 @@ def create_user():
         new_user = User(username=username, password=password, role=role)
         db.session.add(new_user)
         db.session.commit()
+        log_action("User Created", f"Admin created user {username} with role {role}")
         return redirect(url_for('user_management'))
 
     return render_template('create_user.html')
@@ -1802,7 +1933,23 @@ def user_management():
         return redirect(url_for('dashboard'))
 
     users = User.query.all()
-    return render_template('user_management.html', users=users)
+    
+    # Get local backups
+    backup_dir = os.path.join(basedir, "instance", "backup")
+    backups = []
+    if os.path.exists(backup_dir):
+        for f in os.listdir(backup_dir):
+            if f.endswith('.db'):
+                f_path = os.path.join(backup_dir, f)
+                f_stat = os.stat(f_path)
+                backups.append({
+                    'name': f,
+                    'size': f"{f_stat.st_size / 1024:.1f} KB",
+                    'created_at': datetime.fromtimestamp(f_stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')
+                })
+        backups.sort(key=lambda x: x['created_at'], reverse=True)
+        
+    return render_template('user_management.html', users=users, backups=backups)
 
 # Add Equipment
 @app.route('/equipment/add', methods=['GET', 'POST'])
@@ -1823,6 +1970,7 @@ def add_equipment():
         )
         db.session.add(equipment)
         db.session.commit()
+        log_action("Add Equipment", f"Created equipment: {equipment.description} (Serial: {equipment.serial_number})")
         return redirect(url_for('equipment'))
     
     return render_template('add_equipment.html')
@@ -1845,6 +1993,7 @@ def edit_equipment(id):
         equipment.remarks = request.form['remarks']
         equipment.location = request.form['location']
         db.session.commit()
+        log_action("Edit Equipment", f"Updated equipment ID {id}: {equipment.description}")
         return redirect(url_for('equipment'))
     
     return render_template('edit_equipment.html', equipment=equipment)
@@ -1882,6 +2031,7 @@ def add_consumable():
         recalc_single_row(consumable)
 
         db.session.commit()
+        log_action("Add Consumable", f"Created consumable: {consumable.description}")
         return redirect(url_for('consumables'))
     
     return render_template('add_consumable.html')
@@ -1918,6 +2068,7 @@ def edit_consumable(id):
         recalc_single_row(consumable)
 
         db.session.commit()
+        log_action("Edit Consumable", f"Updated consumable ID {id}: {consumable.description}")
         return redirect(url_for('consumables'))
     
     return render_template('edit_consumable.html', consumable=consumable)
@@ -1934,8 +2085,10 @@ def delete_consumable(id):
     UsageLog.query.filter_by(consumable_id=consumable.id).delete(synchronize_session=False)
     StudentNote.query.filter_by(consumable_id=consumable.id).delete(synchronize_session=False)
 
+    desc = consumable.description
     db.session.delete(consumable)
     db.session.commit()
+    log_action("Delete Consumable", f"Permanently deleted consumable: {desc}")
 
     return redirect(url_for('consumables'))
 
@@ -1950,8 +2103,10 @@ def delete_equipment(id):
     BorrowLog.query.filter_by(equipment_id=equipment.id).delete(synchronize_session=False)
     StudentNote.query.filter_by(equipment_id=equipment.id).delete(synchronize_session=False)
 
+    desc = equipment.description
     db.session.delete(equipment)
     db.session.commit()
+    log_action("Delete Equipment", f"Permanently deleted equipment: {desc}")
     return redirect(url_for('equipment'))
 
 # Delete User (Admin only)
@@ -1961,6 +2116,7 @@ def delete_user(id):
         return redirect(url_for('dashboard'))
     
     user = User.query.get_or_404(id)
+    username = user.username
     
     # Prevent admin from deleting themselves
     if user.id == session.get('user_id'):
@@ -1968,6 +2124,7 @@ def delete_user(id):
     
     db.session.delete(user)
     db.session.commit()
+    log_action("Delete User", f"Admin deleted user account: {username}")
     return redirect(url_for('user_management'))
 
 # Add Student Note
@@ -1992,6 +2149,7 @@ def add_student_note():
         )
         db.session.add(note)
         db.session.commit()
+        log_action("Add Note", f"Created {note.note_type} note for {note.person_name}")
         return redirect(url_for('student_notes'))
     
     equipment_list = Equipment.query.all()
@@ -2121,8 +2279,26 @@ def analytics():
     
     from datetime import datetime, timedelta
     current_date = datetime.now().date()
+    
+    # Get date range from query parameters, default to last 30 days
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date')
+    
+    try:
+        if start_date_str:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        else:
+            start_date = current_date - timedelta(days=30)
+            
+        if end_date_str:
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+        else:
+            end_date = current_date
+    except ValueError:
+        start_date = current_date - timedelta(days=30)
+        end_date = current_date
+    
     near_expiry_date = current_date + timedelta(days=30)
-    thirty_days_ago = current_date - timedelta(days=30)
     
     # === ALERTS & INVENTORY ===
     # Low stock items (10% threshold: items_out + items_on_stock < 10% of previous_month_stock)
@@ -2143,17 +2319,21 @@ def analytics():
                 continue
     
     # === USAGE TRENDS ===
-    # Equipment borrowing trends (last 30 days including today)
+    # Equipment borrowing trends (specified date range)
     recent_borrows = (db.session.query(BorrowLog)
-                     .filter(BorrowLog.borrowed_at >= datetime.combine(thirty_days_ago, datetime.min.time()))
+                     .filter(BorrowLog.borrowed_at >= datetime.combine(start_date, datetime.min.time()))
+                     .filter(BorrowLog.borrowed_at <= datetime.combine(end_date, datetime.max.time()))
                      .all())
-    borrow_count_30d = len(recent_borrows)
+    borrow_count_range = len(recent_borrows)
     active_borrows = db.session.query(BorrowLog).filter(BorrowLog.returned_at.is_(None)).count()
     
-    # Daily borrowing breakdown (count of students who borrowed per day)
+    # Daily borrowing breakdown
     daily_borrows = {}
-    for i in range(31):  # 31 days to include today
-        day = thirty_days_ago + timedelta(days=i)
+    delta = end_date - start_date
+    range_days = delta.days + 1
+    
+    for i in range(range_days):
+        day = start_date + timedelta(days=i)
         day_str = day.strftime('%Y-%m-%d')
         daily_borrows[day_str] = 0
     
@@ -2163,17 +2343,18 @@ def analytics():
             if borrow_date in daily_borrows:
                 daily_borrows[borrow_date] += 1
     
-    # Consumable usage trends (last 30 days including today)
+    # Consumable usage trends (specified date range)
     recent_usage = (db.session.query(UsageLog)
-                   .filter(UsageLog.used_at >= datetime.combine(thirty_days_ago, datetime.min.time()))
+                   .filter(UsageLog.used_at >= datetime.combine(start_date, datetime.min.time()))
+                   .filter(UsageLog.used_at <= datetime.combine(end_date, datetime.max.time()))
                    .all())
-    usage_count_30d = len(recent_usage)
-    total_units_consumed_30d = sum(u.quantity_used for u in recent_usage)
+    usage_count_range = len(recent_usage)
+    total_units_consumed_range = sum(u.quantity_used for u in recent_usage)
     
-    # Daily usage breakdown (count of students who used consumables per day)
+    # Daily usage breakdown
     daily_usage = {}
-    for i in range(31):  # 31 days to include today
-        day = thirty_days_ago + timedelta(days=i)
+    for i in range(range_days):
+        day = start_date + timedelta(days=i)
         day_str = day.strftime('%Y-%m-%d')
         daily_usage[day_str] = 0
     
@@ -2183,18 +2364,19 @@ def analytics():
             if usage_date in daily_usage:
                 daily_usage[usage_date] += 1
     
-    # Most borrowed equipment (top 5)
+    # Most borrowed equipment (top 5 overall)
     most_borrowed = (db.session.query(Equipment, func.count(BorrowLog.id).label('borrow_count'))
-                    .join(BorrowLog)
+                    .join(BorrowLog, Equipment.id == BorrowLog.equipment_id)
                     .group_by(Equipment.id)
-                    .order_by(func.count(BorrowLog.id).desc())
+                    .order_by(db.desc('borrow_count'))
                     .limit(5)
                     .all())
     
-    # Top consumed items (top 5)
-    top_consumed = (db.session.query(Consumable)
-                   .filter(Consumable.units_consumed > 0)
-                   .order_by(Consumable.units_consumed.desc())
+    # Top consumed items (top 5 based on UsageLog sum)
+    top_consumed = (db.session.query(Consumable, func.sum(UsageLog.quantity_used).label('total_used'))
+                   .join(UsageLog, Consumable.id == UsageLog.consumable_id)
+                   .group_by(Consumable.id)
+                   .order_by(db.desc('total_used'))
                    .limit(5)
                    .all())
     
@@ -2211,9 +2393,10 @@ def analytics():
             issues_by_type[note_type] = 0
         issues_by_type[note_type] += 1
     
-    # Recent issues (last 30 days)
+    # Recent issues (specified range)
     recent_issues = (db.session.query(StudentNote)
-                    .filter(StudentNote.created_at >= thirty_days_ago.strftime('%Y-%m-%d'))
+                    .filter(StudentNote.created_at >= datetime.combine(start_date, datetime.min.time()))
+                    .filter(StudentNote.created_at <= datetime.combine(end_date, datetime.max.time()))
                     .all())
     recent_pending = [n for n in recent_issues if n.status == 'pending']
     
@@ -2233,8 +2416,8 @@ def analytics():
     overdue_maintenance = [m for m in all_maintenance if m.status == 'overdue']
     scheduled_maintenance = [m for m in all_maintenance if m.status == 'scheduled']
     
-    # Recent maintenance (last 30 days)
-    recent_maintenance = [m for m in all_maintenance if m.created_at and m.created_at.date() >= thirty_days_ago]
+    # Recent maintenance (within specified range)
+    recent_maintenance = [m for m in all_maintenance if m.created_at and start_date <= m.created_at.date() <= end_date]
     recent_completed = [m for m in recent_maintenance if m.status == 'completed']
     
     # Maintenance by type
@@ -2266,16 +2449,19 @@ def analytics():
                        .count())
     
     return render_template('analytics.html',
+                         # Current range
+                         start_date=start_date.strftime('%Y-%m-%d'),
+                         end_date=end_date.strftime('%Y-%m-%d'),
                          # Alerts & Inventory
                          low_stock=low_stock_consumables,
                          near_expiration=near_expiration,
                          # Usage Trends
                          most_borrowed=most_borrowed,
                          top_consumed=top_consumed,
-                         borrow_count_30d=borrow_count_30d,
+                         borrow_count_30d=borrow_count_range,
                          active_borrows=active_borrows,
-                         usage_count_30d=usage_count_30d,
-                         total_units_consumed_30d=total_units_consumed_30d,
+                         usage_count_30d=usage_count_range,
+                         total_units_consumed_30d=total_units_consumed_range,
                          daily_borrows=daily_borrows,
                          daily_usage=daily_usage,
                          # Notes Trends
@@ -2316,14 +2502,34 @@ def export_analytics_pdf():
         from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.units import inch
+        from reportlab.graphics.shapes import Drawing
+        from reportlab.graphics.charts.linecharts import HorizontalLineChart
     except ImportError:
         return ("Missing dependency: reportlab. Install it first, e.g. "
                 "`pip install reportlab`"), 500
 
     from datetime import datetime, timedelta
     current_date = datetime.now().date()
+    
+    # Get date range from query parameters, default to last 30 days
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date')
+    
+    try:
+        if start_date_str:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        else:
+            start_date = current_date - timedelta(days=30)
+            
+        if end_date_str:
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+        else:
+            end_date = current_date
+    except ValueError:
+        start_date = current_date - timedelta(days=30)
+        end_date = current_date
+
     near_expiry_date = current_date + timedelta(days=30)
-    thirty_days_ago = current_date - timedelta(days=30)
     
     # === GATHER ALL DATA ===
     low_stock_consumables = (db.session.query(Consumable)
@@ -2342,25 +2548,61 @@ def export_analytics_pdf():
                 continue
     
     recent_borrows = (db.session.query(BorrowLog)
-                     .filter(BorrowLog.borrowed_at >= datetime.combine(thirty_days_ago, datetime.min.time()))
+                     .filter(BorrowLog.borrowed_at >= datetime.combine(start_date, datetime.min.time()))
+                     .filter(BorrowLog.borrowed_at <= datetime.combine(end_date, datetime.max.time()))
                      .all())
     active_borrows = db.session.query(BorrowLog).filter(BorrowLog.returned_at.is_(None)).count()
     
     recent_usage = (db.session.query(UsageLog)
-                   .filter(UsageLog.used_at >= datetime.combine(thirty_days_ago, datetime.min.time()))
+                   .filter(UsageLog.used_at >= datetime.combine(start_date, datetime.min.time()))
+                   .filter(UsageLog.used_at <= datetime.combine(end_date, datetime.max.time()))
                    .all())
-    total_units_consumed_30d = sum(u.quantity_used for u in recent_usage)
+    total_units_consumed_range = sum(u.quantity_used for u in recent_usage)
+
+    # Calculate daily trends for chart
+    delta = end_date - start_date
+    range_days = delta.days + 1
+    daily_labels = []
+    borrow_series = []
+    usage_series = []
+    db_map = {(start_date + timedelta(days=i)).strftime('%Y-%m-%d'): 0 for i in range(range_days)}
+    du_map = {(start_date + timedelta(days=i)).strftime('%Y-%m-%d'): 0 for i in range(range_days)}
     
+    for b in recent_borrows:
+        if b.borrowed_at:
+            ds = b.borrowed_at.date().strftime('%Y-%m-%d')
+            if ds in db_map: db_map[ds] += 1
+    for u in recent_usage:
+        if u.used_at:
+            ds = u.used_at.date().strftime('%Y-%m-%d')
+            if ds in du_map: du_map[ds] += 1
+            
+    for i in range(range_days):
+        d = start_date + timedelta(days=i)
+        ds = d.strftime('%Y-%m-%d')
+        borrow_series.append(db_map[ds])
+        usage_series.append(du_map[ds])
+        if range_days > 15:
+            if i % (range_days // 8 or 1) == 0 or i == range_days - 1:
+                daily_labels.append(d.strftime('%m/%d'))
+            else:
+                daily_labels.append("")
+        else:
+            daily_labels.append(d.strftime('%m/%d'))
+    
+    # Most borrowed equipment (top 5 overall)
     most_borrowed = (db.session.query(Equipment, func.count(BorrowLog.id).label('borrow_count'))
-                    .join(BorrowLog)
+                    .join(BorrowLog, Equipment.id == BorrowLog.equipment_id)
                     .group_by(Equipment.id)
-                    .order_by(func.count(BorrowLog.id).desc())
+                    .order_by(db.desc('borrow_count'))
                     .limit(5)
                     .all())
     
-    top_consumed = (db.session.query(Consumable)
-                   .filter(Consumable.units_consumed > 0)
-                   .order_by(Consumable.units_consumed.desc())
+    # Top consumed items (top 5 based on UsageLog sum)
+    top_consumed = (db.session.query(Consumable, func.sum(UsageLog.quantity_used).label('total_used'))
+                   .join(UsageLog, Consumable.id == UsageLog.consumable_id)
+                   .group_by(Consumable.id)
+                   .order_by(db.desc('total_used'))
                    .limit(5)
                    .all())
     
@@ -2399,7 +2641,7 @@ def export_analytics_pdf():
     # Recalculate after status updates
     overdue_maintenance = [m for m in all_maintenance if m.status == 'overdue']
     scheduled_maintenance = [m for m in all_maintenance if m.status == 'scheduled']
-    recent_maintenance = [m for m in all_maintenance if m.created_at and m.created_at.date() >= thirty_days_ago]
+    recent_maintenance = [m for m in all_maintenance if m.created_at and m.created_at.date() >= start_date and m.created_at.date() <= end_date]
     recent_completed = [m for m in recent_maintenance if m.status == 'completed']
     
     # Maintenance by type
@@ -2479,6 +2721,7 @@ def export_analytics_pdf():
     # === TITLE ===
     elements.append(Paragraph("Lab Analytics Report", title_style))
     elements.append(Paragraph(f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}", styles["Normal"]))
+    elements.append(Paragraph(f"Reporting Period: {start_date} to {end_date}", styles["Normal"]))
     elements.append(Spacer(1, 12))
     
     # === OVERALL STATISTICS ===
@@ -2564,15 +2807,18 @@ def export_analytics_pdf():
     elements.append(Spacer(1, 12))
     
     # === MOST BORROWED EQUIPMENT ===
-    elements.append(Paragraph("Most Borrowed Equipment (Last 30 Days)", heading_style))
+    elements.append(Paragraph("Most Borrowed Equipment (Selected Period)", heading_style))
     if most_borrowed:
         borrowed_data = [
-            [create_paragraph("Equipment", header_style), 
+            [create_paragraph("Equipment Name / Details", header_style), 
              create_paragraph("Borrow Count", header_style)]
         ]
-        for equipment, count in most_borrowed:
+        for eq, count in most_borrowed:
+            brand = f"{eq.brand_name} " if eq.brand_name and eq.brand_name != 'N/A' else ""
+            model = f" {eq.model}" if eq.model and eq.model != 'N/A' else ""
+            equipment_display = f"{brand}{eq.description}{model}"
             borrowed_data.append([
-                create_paragraph(sval(equipment.description)),
+                create_paragraph(equipment_display),
                 create_paragraph(sval(count)),
             ])
         borrowed_table = Table(borrowed_data, colWidths=[250, 100])
@@ -2592,16 +2838,16 @@ def export_analytics_pdf():
     elements.append(Spacer(1, 12))
     
     # === TOP CONSUMED ITEMS ===
-    elements.append(Paragraph("Top Consumed Items (All Time)", heading_style))
+    elements.append(Paragraph("Top Consumed Items (Selected Period)", heading_style))
     if top_consumed:
         consumed_data = [
             [create_paragraph("Item Description", header_style), 
              create_paragraph("Units Consumed", header_style)]
         ]
-        for item in top_consumed:
+        for item, total_used in top_consumed:
             consumed_data.append([
                 create_paragraph(sval(item.description)),
-                create_paragraph(sval(item.units_consumed)),
+                create_paragraph(sval(total_used)),
             ])
         consumed_table = Table(consumed_data, colWidths=[250, 100])
         consumed_table.setStyle(TableStyle([
@@ -2684,7 +2930,7 @@ def export_analytics_pdf():
             [create_paragraph("Overdue", header_style), create_paragraph(str(len(overdue_maintenance)), cell_style)],
             [create_paragraph("Completion Rate", header_style), create_paragraph(f"{maintenance_completion_rate}%", cell_style)],
             [create_paragraph("Total Maintenance Cost", header_style), create_paragraph(f"₱{total_maintenance_cost:,.2f}", cell_style)],
-            [create_paragraph("Completed (Last 30 Days)", header_style), create_paragraph(str(len(recent_completed)), cell_style)],
+            [create_paragraph("Completed (Selected Period)", header_style), create_paragraph(str(len(recent_completed)), cell_style)],
         ]
         maintenance_stats_table = Table(maintenance_stats_data, colWidths=[250, 150])
         maintenance_stats_table.setStyle(TableStyle([
@@ -2728,24 +2974,32 @@ def export_analytics_pdf():
         
         # Recent maintenance records
         if recent_maintenance:
-            elements.append(Paragraph("Recent Maintenance (Last 30 Days)", heading_style))
+            elements.append(Paragraph("Recent Maintenance (Selected Period)", heading_style))
             recent_maint_data = [
-                [create_paragraph("Equipment", header_style),
+                [create_paragraph("Equipment Name / Details", header_style),
                  create_paragraph("Type", header_style),
                  create_paragraph("Scheduled", header_style),
                  create_paragraph("Status", header_style),
                  create_paragraph("Cost", header_style)]
             ]
             for m in recent_maintenance[:15]:  # Limit to 15 records
-                equipment_desc = m.equipment.description if m.equipment else 'Unknown'
+                if m.equipment:
+                    eq = m.equipment
+                    brand = f"{eq.brand_name} " if eq.brand_name and eq.brand_name != 'N/A' else ""
+                    model = f" {eq.model}" if eq.model and eq.model != 'N/A' else ""
+                    sn = f" (S/N: {eq.serial_number})" if eq.serial_number and eq.serial_number != 'N/A' else ""
+                    equipment_display = f"{brand}{eq.description}{model}{sn}"
+                else:
+                    equipment_display = 'Unknown'
+
                 recent_maint_data.append([
-                    create_paragraph(equipment_desc),
+                    create_paragraph(equipment_display),
                     create_paragraph(m.maintenance_type.capitalize()),
                     create_paragraph(str(m.scheduled_date)),
                     create_paragraph(m.status.capitalize()),
                     create_paragraph(f"₱{m.cost:,.2f}" if m.cost else "N/A"),
                 ])
-            recent_maint_table = Table(recent_maint_data, colWidths=[180, 80, 80, 80, 80])
+            recent_maint_table = Table(recent_maint_data, colWidths=[200, 70, 80, 70, 80])
             recent_maint_table.setStyle(TableStyle([
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#ECFEFF")),
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#164E63")),
@@ -2760,12 +3014,12 @@ def export_analytics_pdf():
             elements.append(Spacer(1, 12))
     
     # === USAGE SUMMARY ===
-    elements.append(Paragraph("30-Day Usage Summary", heading_style))
+    elements.append(Paragraph("Usage Summary (Selected Period)", heading_style))
     usage_summary_data = [
         [create_paragraph("Metric", header_style), create_paragraph("Value", header_style)],
         [create_paragraph("Equipment Borrowing Events", cell_style), create_paragraph(str(len(recent_borrows)), cell_style)],
         [create_paragraph("Consumable Usage Events", cell_style), create_paragraph(str(len(recent_usage)), cell_style)],
-        [create_paragraph("Total Units Consumed", cell_style), create_paragraph(str(total_units_consumed_30d), cell_style)],
+        [create_paragraph("Total Units Consumed", cell_style), create_paragraph(str(total_units_consumed_range), cell_style)],
     ]
     usage_summary_table = Table(usage_summary_data, colWidths=[250, 100])
     usage_summary_table.setStyle(TableStyle([
@@ -2780,6 +3034,53 @@ def export_analytics_pdf():
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
     ]))
     elements.append(usage_summary_table)
+    elements.append(Spacer(1, 12))
+    
+    # === USAGE TRENDS CHART ===
+    elements.append(Paragraph("Usage Trends (Daily Activity)", heading_style))
+    
+    # Ensure series are not empty for the chart
+    b_data = borrow_series if borrow_series else [0]
+    u_data = usage_series if usage_series else [0]
+    
+    # Create Chart Drawing
+    drawing = Drawing(750, 180)
+    chart = HorizontalLineChart()
+    chart.x = 40
+    chart.y = 30
+    chart.height = 120
+    chart.width = 680
+    chart.data = [b_data, u_data]
+    chart.categoryAxis.categoryNames = daily_labels
+    chart.categoryAxis.labels.angle = 0
+    chart.categoryAxis.labels.fontSize = 7
+    chart.categoryAxis.tickDown = 3
+    
+    max_val = max(b_data + u_data + [5])
+    chart.valueAxis.valueMin = 0
+    chart.valueAxis.valueMax = max_val + 1
+    chart.valueAxis.valueStep = max(1, max_val // 5)
+    chart.valueAxis.labels.fontSize = 7
+    
+    chart.lines[0].strokeColor = colors.HexColor("#3B82F6") # Blue
+    chart.lines[1].strokeColor = colors.HexColor("#8B5CF6") # Purple
+    chart.lines.strokeWidth = 1.5
+    
+    drawing.add(chart)
+    elements.append(drawing)
+    
+    # Small Legend
+    legend_style_borrow = ParagraphStyle('l1', parent=cell_style, textColor=colors.HexColor("#3B82F6"), fontName='Helvetica-Bold')
+    legend_style_usage = ParagraphStyle('l2', parent=cell_style, textColor=colors.HexColor("#8B5CF6"), fontName='Helvetica-Bold')
+    
+    legend_data = [[
+        create_paragraph("▬ Equipment Borrows", legend_style_borrow),
+        create_paragraph("▬ Consumable Usage", legend_style_usage)
+    ]]
+    legend_table = Table(legend_data, colWidths=[150, 150])
+    legend_table.setStyle(TableStyle([('ALIGN', (0,0), (-1,-1), 'CENTER')]))
+    elements.append(legend_table)
+    elements.append(Spacer(1, 12))
     
     # Build the PDF document
     doc.build(elements)
@@ -2799,11 +3100,194 @@ def backup_database():
         return redirect(url_for('dashboard'))
     
     db_path = os.path.join(basedir, "instance", "database.db")
+    backup_dir = os.path.join(basedir, "instance", "backup")
+    
+    if not os.path.exists(backup_dir):
+        os.makedirs(backup_dir)
+        
     if os.path.exists(db_path):
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        return send_file(db_path, as_attachment=True, download_name=f"backup_cmt_inventory_{timestamp}.db")
+        backup_filename = f"backup_cmt_inventory_{timestamp}.db"
+        backup_path = os.path.join(backup_dir, backup_filename)
+        
+        # Save local copy
+        shutil.copy2(db_path, backup_path)
+        
+        log_action("Database Backup", f"Manual backup created: {backup_filename}")
+        return send_file(db_path, as_attachment=True, download_name=backup_filename)
     else:
         return "Database file not found", 404
+
+@app.route('/admin/backups/download/<filename>')
+def download_backup(filename):
+    if session.get('role') != 'admin':
+        return redirect(url_for('dashboard'))
+    
+    if ".." in filename or "/" in filename or "\\" in filename:
+        return "Invalid filename", 400
+        
+    backup_path = os.path.join(basedir, "instance", "backup", filename)
+    if os.path.exists(backup_path):
+        return send_file(backup_path, as_attachment=True)
+    return "Backup not found", 404
+
+@app.route('/admin/backups/delete/<filename>')
+def delete_backup(filename):
+    if session.get('role') != 'admin':
+        return redirect(url_for('dashboard'))
+    
+    if ".." in filename or "/" in filename or "\\" in filename:
+        return "Invalid filename", 400
+        
+    backup_path = os.path.join(basedir, "instance", "backup", filename)
+    if os.path.exists(backup_path):
+        os.remove(backup_path)
+        
+    return redirect(url_for('user_management'))
+
+@app.route('/admin/backups/restore/<filename>')
+def restore_backup(filename):
+    if session.get('role') != 'admin':
+        return redirect(url_for('dashboard'))
+    
+    if ".." in filename or "/" in filename or "\\" in filename:
+        return "Invalid filename", 400
+        
+    backup_path = os.path.join(basedir, "instance", "backup", filename)
+    db_path = os.path.join(basedir, "instance", "database.db")
+    
+    if not os.path.exists(backup_path):
+        return "Backup file not found", 404
+        
+    try:
+        # 1. Create a safety backup of the current database before overwriting
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        safety_path = os.path.join(basedir, "instance", "backup", f"pre_restore_safety_{timestamp}.db")
+        if os.path.exists(db_path):
+            shutil.copy2(db_path, safety_path)
+            
+        # 2. Close connections and replace the database file
+        db.session.remove()
+        db.engine.dispose()
+        
+        shutil.copy2(backup_path, db_path)
+        
+        # 3. Log the action (into the NEWLY replaced database)
+        log_action("Database Restore", f"Restored system from backup: {filename}")
+        
+        # 4. Clear session as the user table might have changed
+        session.clear()
+        return redirect(url_for('login'))
+    except Exception as e:
+        return f"Restore failed: {str(e)}", 500
+
+@app.route('/admin/logs')
+def view_logs():
+    if session.get('role') != 'admin':
+        return redirect(url_for('dashboard'))
+    
+    q = request.args.get('q', '').strip()
+    
+    query = AuditLog.query.join(User, isouter=True)
+    
+    if q:
+        query = query.filter(or_(
+            AuditLog.action.ilike(f'%{q}%'),
+            AuditLog.details.ilike(f'%{q}%'),
+            User.username.ilike(f'%{q}%')
+        ))
+    
+    logs = query.order_by(AuditLog.timestamp.desc()).limit(500).all()
+    
+    return render_template('system_logs.html', logs=logs, q=q)
+
+@app.route('/admin/logs/export/pdf')
+def export_logs_pdf():
+    if session.get('role') != 'admin':
+        return redirect(url_for('dashboard'))
+
+    q = request.args.get('q', '').strip()
+    query = AuditLog.query.join(User, isouter=True)
+    
+    if q:
+        query = query.filter(or_(
+            AuditLog.action.ilike(f'%{q}%'),
+            AuditLog.details.ilike(f'%{q}%'),
+            User.username.ilike(f'%{q}%')
+        ))
+    
+    logs = query.order_by(AuditLog.timestamp.desc()).limit(1000).all()
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), 
+                            rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+    styles = getSampleStyleSheet()
+    
+    # Custom styles
+    header_style = ParagraphStyle(
+        'HeaderStyle',
+        parent=styles['Normal'],
+        fontSize=9,
+        leading=11,
+        fontName='Helvetica-Bold',
+        alignment=0,
+    )
+    cell_style = ParagraphStyle(
+        'CellStyle',
+        parent=styles['Normal'],
+        fontSize=8,
+        leading=10,
+        alignment=0,
+    )
+
+    def create_paragraph(text, is_header=False):
+        if text is None: text = ""
+        return Paragraph(str(text), header_style if is_header else cell_style)
+
+    elements = []
+    elements.append(Paragraph("System Audit Logs Report", styles["Title"]))
+    elements.append(Spacer(1, 12))
+    elements.append(Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", styles["Normal"]))
+    if q:
+        elements.append(Paragraph(f"Filter: {q}", styles["Normal"]))
+    elements.append(Spacer(1, 12))
+
+    data = [[
+        create_paragraph("Timestamp", True),
+        create_paragraph("User", True),
+        create_paragraph("Action", True),
+        create_paragraph("Details", True),
+        create_paragraph("IP Address", True)
+    ]]
+
+    for log in logs:
+        user_info = f"{log.user.username} ({log.user.role})" if log.user else "System"
+        data.append([
+            create_paragraph(log.timestamp.strftime('%Y-%m-%d %H:%M:%S')),
+            create_paragraph(user_info),
+            create_paragraph(log.action),
+            create_paragraph(log.details),
+            create_paragraph(log.ip_address)
+        ])
+
+    table = Table(data, repeatRows=1, colWidths=[110, 110, 110, 360, 100])
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3F4F6")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),
+        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D1D5DB")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#FAFAFA")]),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    elements.append(table)
+    
+    doc.build(elements)
+    buffer.seek(0)
+    
+    filename = f"audit_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    return send_file(buffer, mimetype="application/pdf", as_attachment=True, download_name=filename)
 
 # ========== EQUIPMENT MAINTENANCE ROUTES ==========
 @app.route('/maintenance')
@@ -2819,6 +3303,8 @@ def maintenance():
     direction = 'desc' if direction == 'desc' else 'asc'
     status_filter = request.args.get('status', 'all')  # all, scheduled, completed, overdue
     type_filter = request.args.get('type', 'all')  # all, calibration, repair, preventive, inspection
+    date_from = request.args.get('date_from', '').strip()
+    date_to = request.args.get('date_to', '').strip()
     
     sortable_fields = {
         'equipment', 'maintenance_type', 'scheduled_date', 'completed_date', 
@@ -2848,6 +3334,12 @@ def maintenance():
     if type_filter != 'all':
         query = query.filter(EquipmentMaintenance.maintenance_type == type_filter)
     
+    # Date range filter (scheduled_date)
+    if date_from:
+        query = query.filter(EquipmentMaintenance.scheduled_date >= date_from)
+    if date_to:
+        query = query.filter(EquipmentMaintenance.scheduled_date <= date_to)
+    
     # Sorting
     if sort == 'equipment':
         sort_col = Equipment.description
@@ -2871,7 +3363,9 @@ def maintenance():
                          sort=sort, 
                          dir=direction,
                          status_filter=status_filter,
-                         type_filter=type_filter)
+                         type_filter=type_filter,
+                         date_from=date_from,
+                         date_to=date_to)
 
 @app.route('/maintenance/add', methods=['GET', 'POST'])
 def add_maintenance():
@@ -2895,6 +3389,7 @@ def add_maintenance():
         )
         db.session.add(record)
         db.session.commit()
+        log_action("Add Maintenance", f"Scheduled {record.maintenance_type} for {record.equipment.description}")
         return redirect(url_for('maintenance'))
     
     equipment_list = Equipment.query.order_by(Equipment.description).all()
@@ -2934,6 +3429,7 @@ def edit_maintenance(id):
         record.cost = float(request.form.get('cost', 0.0) or 0.0)
         
         db.session.commit()
+        log_action("Edit Maintenance", f"Updated maintenance record ID {id} for {record.equipment.description}")
         return redirect(url_for('maintenance'))
     
     equipment_list = Equipment.query.order_by(Equipment.description).all()
@@ -2956,6 +3452,7 @@ def complete_maintenance(id):
         record.performed_by = performed_by
     
     db.session.commit()
+    log_action("Complete Maintenance", f"Marked maintenance as completed for {record.equipment.description}")
     return redirect(url_for('maintenance'))
 
 @app.route('/maintenance/delete/<int:id>', methods=['POST'])
@@ -2964,9 +3461,167 @@ def delete_maintenance(id):
         return redirect(url_for('dashboard'))
     
     record = EquipmentMaintenance.query.get_or_404(id)
+    desc = f"{record.maintenance_type} for {record.equipment.description}"
     db.session.delete(record)
     db.session.commit()
+    log_action("Delete Maintenance", f"Deleted maintenance record: {desc}")
     return redirect(url_for('maintenance'))
+
+@app.route('/maintenance/export/pdf')
+def export_maintenance_pdf():
+    """
+    Export the current maintenance view to a landscape A4 PDF table.
+    """
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+    except ImportError:
+        return ("Missing dependency: reportlab. Install it first, e.g. "
+                "`pip install reportlab`"), 500
+
+    q = request.args.get('q', '').strip()
+    sort = request.args.get('sort', 'scheduled_date')
+    direction = request.args.get('dir', 'desc').lower()
+    direction = 'desc' if direction == 'desc' else 'asc'
+    status_filter = request.args.get('status', 'all')
+    type_filter = request.args.get('type', 'all')
+    date_from = request.args.get('date_from', '').strip()
+    date_to = request.args.get('date_to', '').strip()
+
+    sortable_fields = {
+        'equipment', 'maintenance_type', 'scheduled_date', 'completed_date', 
+        'performed_by', 'cost', 'status', 'created_at'
+    }
+    if sort not in sortable_fields:
+        sort = 'scheduled_date'
+
+    query = EquipmentMaintenance.query.outerjoin(Equipment)
+    
+    if q:
+        like = f"%{q}%"
+        query = query.filter(or_(
+            Equipment.description.ilike(like),
+            EquipmentMaintenance.maintenance_type.ilike(like),
+            EquipmentMaintenance.performed_by.ilike(like),
+            EquipmentMaintenance.notes.ilike(like),
+        ))
+    
+    if status_filter != 'all':
+        query = query.filter(EquipmentMaintenance.status == status_filter)
+    
+    if type_filter != 'all':
+        query = query.filter(EquipmentMaintenance.maintenance_type == type_filter)
+        
+    if date_from:
+        query = query.filter(EquipmentMaintenance.scheduled_date >= date_from)
+    if date_to:
+        query = query.filter(EquipmentMaintenance.scheduled_date <= date_to)
+
+    if sort == 'equipment':
+        sort_col = Equipment.description
+    else:
+        sort_col = getattr(EquipmentMaintenance, sort)
+    
+    query = query.order_by(sort_col.desc() if direction == 'desc' else sort_col.asc())
+    records = query.all()
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36,
+    )
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'TitleStyle',
+        parent=styles['Heading1'],
+        fontSize=18,
+        fontName='Helvetica-Bold',
+        alignment=1, # Center
+        spaceAfter=20,
+    )
+
+    header_style = ParagraphStyle(
+        'HeaderStyle',
+        parent=styles['Normal'],
+        fontSize=10,
+        fontName='Helvetica-Bold',
+    )
+
+    cell_style = ParagraphStyle(
+        'CellStyle',
+        parent=styles['Normal'],
+        fontSize=9,
+        wordWrap='CJK',
+    )
+
+    elements = []
+    elements.append(Paragraph("Equipment Maintenance Report", title_style))
+    
+    info_text = f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    if q or status_filter != 'all' or type_filter != 'all' or date_from or date_to:
+        info_text += " | Filters: "
+        filters = []
+        if q: filters.append(f"Search: {q}")
+        if status_filter != 'all': filters.append(f"Status: {status_filter}")
+        if type_filter != 'all': filters.append(f"Type: {type_filter}")
+        if date_from: filters.append(f"From: {date_from}")
+        if date_to: filters.append(f"To: {date_to}")
+        info_text += ", ".join(filters)
+    
+    elements.append(Paragraph(info_text, styles['Normal']))
+    elements.append(Spacer(1, 12))
+
+    data = [
+        [Paragraph("Equipment", header_style), 
+         Paragraph("Type", header_style),
+         Paragraph("Scheduled", header_style),
+         Paragraph("Completed", header_style),
+         Paragraph("Performed By", header_style),
+         Paragraph("Cost", header_style),
+         Paragraph("Status", header_style)]
+    ]
+
+    for r in records:
+        data.append([
+            Paragraph(r.equipment.description if r.equipment else 'N/A', cell_style),
+            Paragraph(r.maintenance_type.capitalize(), cell_style),
+            Paragraph(r.scheduled_date.strftime('%Y-%m-%d'), cell_style),
+            Paragraph(r.completed_date.strftime('%Y-%m-%d') if r.completed_date else '—', cell_style),
+            Paragraph(r.performed_by if r.performed_by else '—', cell_style),
+            Paragraph(f"₱{r.cost:,.2f}" if r.cost else "₱0.00", cell_style),
+            Paragraph(r.status.capitalize(), cell_style),
+        ])
+
+    # Column widths for landscape A4 (approx 770 points printable width)
+    # [Equip, Type, Sched, Compl, PerfBy, Cost, Status]
+    col_widths = [180, 80, 80, 80, 150, 80, 80]
+    
+    table = Table(data, colWidths=col_widths, repeatRows=1)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.whitesmoke),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+    ]))
+
+    elements.append(table)
+    doc.build(elements)
+    
+    buffer.seek(0)
+    filename = f"maintenance_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    return send_file(buffer, mimetype="application/pdf", as_attachment=True, download_name=filename)
 
 
 # ==================== BARCODE FUNCTIONS ====================
@@ -3203,6 +3858,48 @@ def print_consumable_barcode(id):
                            item=consumable, 
                            item_type='consumable',
                            barcode_url=url_for('get_consumable_barcode', id=id))
+
+
+@app.route('/barcode/print/bulk')
+def print_bulk_barcodes():
+    """Render a printable page with multiple barcodes in 2x4 grid."""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+        
+    items_param = request.args.get('items', '')
+    if not items_param:
+        return "No items selected for printing", 400
+        
+    selected_items = []
+    # items_param format: equipment:1,consumable:5,equipment:12
+    for pair in items_param.split(','):
+        if ':' not in pair: continue
+        itype, iid = pair.split(':')
+        
+        try:
+            iid_int = int(iid)
+            if itype == 'equipment':
+                item = Equipment.query.get(iid_int)
+                if item:
+                    ensure_equipment_barcode(item)
+                    selected_items.append({
+                        'item': item,
+                        'type': 'Equipment',
+                        'barcode_url': url_for('get_equipment_barcode', id=item.id)
+                    })
+            elif itype == 'consumable':
+                item = Consumable.query.get(iid_int)
+                if item:
+                    ensure_consumable_barcode(item)
+                    selected_items.append({
+                        'item': item,
+                        'type': 'Consumable',
+                        'barcode_url': url_for('get_consumable_barcode', id=item.id)
+                    })
+        except ValueError:
+            continue
+                
+    return render_template('print_barcode_bulk.html', items=selected_items)
 
 
 if __name__ == '__main__':

@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Print Bulk Barcodes</title>
+    <style>
+        @media print {
+            body { 
+                margin: 0; 
+                padding: 0; 
+                background: white;
+            }
+            .no-print { display: none !important; }
+            .page { 
+                page-break-after: always;
+                margin: 0;
+                padding: 10mm;
+                height: 277mm; /* Approximate A4 height minus padding */
+            }
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #f3f4f6;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        .print-controls {
+            max-width: 900px;
+            margin: 0 auto 20px;
+            padding: 16px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 500;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-flex;
+            items-center: center;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #059669, #047857);
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: #e5e7eb;
+            color: #374151;
+        }
+        
+        .page {
+            background: white;
+            width: 210mm;
+            min-height: 297mm;
+            margin: 0 auto 20mm;
+            padding: 10mm;
+            box-sizing: border-box;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        
+        .barcode-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            grid-template-rows: repeat(4, 1fr);
+            gap: 10mm;
+            height: 100%;
+        }
+        
+        .barcode-card {
+            border: 1px dashed #ccc;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            height: 65mm; /* Approximate height for 4 rows on A4 */
+            box-sizing: border-box;
+        }
+        
+        .barcode-card img {
+            max-width: 100%;
+            max-height: 40mm;
+            object-fit: contain;
+        }
+        
+        .item-name {
+            font-size: 12px;
+            font-weight: 600;
+            margin-top: 8px;
+            color: #111827;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        
+        .item-type {
+            font-size: 10px;
+            text-transform: uppercase;
+            color: #6b7280;
+            margin-top: 2px;
+        }
+        
+        .barcode-value {
+            font-family: monospace;
+            font-size: 11px;
+            margin-top: 4px;
+            color: #374151;
+        }
+    </style>
+</head>
+<body>
+    <div class="print-controls no-print">
+        <div>
+            <h1 style="margin: 0; font-size: 18px; color: #111827;">Bulk Barcode Printing</h1>
+            <p style="margin: 4px 0 0; font-size: 13px; color: #6b7280;">2x4 Layout (8 items per page)</p>
+        </div>
+        <div style="display: flex; gap: 12px;">
+            <a href="javascript:window.history.back()" class="btn btn-secondary">Go Back</a>
+            <button onclick="window.print()" class="btn btn-primary">
+                <svg style="width: 18px; height: 18px; margin-right: 8px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+                Print Now
+            </button>
+        </div>
+    </div>
+
+    {% for i in range(0, items|length, 8) %}
+    <div class="page">
+        <div class="barcode-grid">
+            {% for j in range(i, i + 8) %}
+                {% if j < items|length %}
+                    {% set entry = items[j] %}
+                    <div class="barcode-card">
+                        <div class="item-type">{{ entry.type }}</div>
+                        <img src="{{ entry.barcode_url }}" alt="Barcode">
+                        <div class="barcode-value">{{ entry.item.barcode }}</div>
+                        <div class="item-name">{{ entry.item.description }}</div>
+                    </div>
+                {% else %}
+                    <div class="barcode-card" style="border: none;"></div>
+                {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</body>
+</html>

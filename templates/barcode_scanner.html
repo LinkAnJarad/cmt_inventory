@@ -154,10 +154,18 @@
 <script>
   let scannerActive = false;
   let quaggaInitialized = false;
+  let lastResult = null;
+  let resultCount = 0;
+  const REQUIRED_CONSENSUS = 3;
   
   function openBarcodeScanner() {
     document.getElementById('barcodeScannerModal').classList.remove('hidden');
     document.body.style.overflow = 'hidden';
+    
+    // Reset consensus counters
+    lastResult = null;
+    resultCount = 0;
+    
     startCameraScanner();
   }
   
@@ -220,26 +228,35 @@
           constraints: {
             facingMode: "environment",
             width: { min: 640, ideal: 1280, max: 1920 },
-            height: { min: 480, ideal: 720, max: 1080 }
+            height: { min: 480, ideal: 720, max: 1080 },
+            aspectRatio: { min: 1, max: 2 }
+          },
+          area: { // Narrow search area for better focus
+            top: "25%",
+            right: "10%",
+            left: "10%",
+            bottom: "25%"
           }
         },
+        numWorkers: navigator.hardwareConcurrency || 4,
         decoder: {
           readers: [
             "code_128_reader",
             "ean_reader",
             "ean_8_reader",
             "code_39_reader",
-            "code_39_vin_reader",
             "codabar_reader",
             "upc_reader",
             "upc_e_reader"
-          ]
+          ],
+          multiple: false
         },
         locate: true,
         locator: {
-          patchSize: "medium",
+          patchSize: "large", // "large" is often better for standard barcodes
           halfSample: true
-        }
+        },
+        frequency: 20
       }, function(err) {
         loadingEl.classList.add('hidden');
         
@@ -273,13 +290,31 @@
         Quagga.onDetected(function(result) {
           if (result && result.codeResult && result.codeResult.code) {
             const code = result.codeResult.code;
-            console.log('Barcode detected:', code);
-            // Play beep sound
-            playBeep();
-            // Stop scanning temporarily
-            Quagga.pause();
-            // Look up the barcode
-            lookupBarcodeValue(code);
+            
+            // Basic check for empty or too short codes
+            if (!code || code.length < 3) return;
+
+            // Implementation of a simple consensus mechanism
+            if (code === lastResult) {
+              resultCount++;
+            } else {
+              lastResult = code;
+              resultCount = 1;
+            }
+
+            if (resultCount >= REQUIRED_CONSENSUS) {
+              console.log('Barcode verified via consensus:', code);
+              // reset for next scan
+              lastResult = null;
+              resultCount = 0;
+              
+              // Play beep sound
+              playBeep();
+              // Stop scanning temporarily
+              Quagga.pause();
+              // Look up the barcode
+              lookupBarcodeValue(code);
+            }
           }
         });
       }
@@ -337,6 +372,13 @@
       .then(response => response.json())
       .then(data => {
         if (data.found) {
+          // Check if there's a global scan callback (used in bulk operations)
+          if (typeof window.onBarcodeScanned === 'function') {
+            window.onBarcodeScanned(data);
+            closeBarcodeScanner();
+            return;
+          }
+
           const typeColor = data.type === 'equipment' ? 'green' : 'blue';
           const typeLabel = data.type === 'equipment' ? 'Equipment' : 'Consumable';
           const actionUrl = data.type === 'equipment' ? data.borrow_url : data.use_url;

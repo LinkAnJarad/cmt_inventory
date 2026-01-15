@@ -132,13 +132,22 @@
                 </div>
               </div>
               
-              <button type="button" onclick="addEquipmentItem()" 
-                      class="flex items-center space-x-2 text-green-600 hover:text-green-800 font-medium transition-colors">
-                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-                </svg>
-                <span>Add Another Equipment</span>
-              </button>
+              <div class="flex items-center space-x-4">
+                <button type="button" onclick="addEquipmentItem()" 
+                        class="flex items-center space-x-2 text-green-600 hover:text-green-800 font-medium transition-colors">
+                  <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                  </svg>
+                  <span>Add Another Equipment</span>
+                </button>
+                <button type="button" onclick="openBarcodeScanner()" 
+                        class="flex items-center space-x-2 text-purple-600 hover:text-purple-800 font-medium transition-colors">
+                  <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
+                  </svg>
+                  <span>Scan Barcode</span>
+                </button>
+              </div>
             </div>
 
             <!-- Equipment Submit Button -->
@@ -283,13 +292,22 @@
                 </div>
               </div>
               
-              <button type="button" onclick="addConsumableItem()" 
-                      class="flex items-center space-x-2 text-blue-600 hover:text-blue-800 font-medium transition-colors">
-                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-                </svg>
-                <span>Add Another Consumable</span>
-              </button>
+              <div class="flex items-center space-x-4">
+                <button type="button" onclick="addConsumableItem()" 
+                        class="flex items-center space-x-2 text-blue-600 hover:text-blue-800 font-medium transition-colors">
+                  <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                  </svg>
+                  <span>Add Another Consumable</span>
+                </button>
+                <button type="button" onclick="openBarcodeScanner()" 
+                        class="flex items-center space-x-2 text-purple-600 hover:text-purple-800 font-medium transition-colors">
+                  <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
+                  </svg>
+                  <span>Scan Barcode</span>
+                </button>
+              </div>
             </div>
 
             <!-- Consumables Submit Button -->
@@ -529,4 +547,63 @@
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
   }
 </style>
+
+<!-- Barcode Scanner Modal -->
+{% include 'barcode_scanner.html' %}
+
+<script>
+  // Handle scanned barcodes for bulk operations
+  window.onBarcodeScanned = function(data) {
+    if (data.type === 'equipment') {
+      // Switch to equipment tab if not already there
+      switchTab('equipment');
+      
+      // Find an empty row or add a new one
+      let lastRow = document.querySelector('#equipment-list .equipment-item:last-child');
+      let select = lastRow ? lastRow.querySelector('select') : null;
+      
+      if (select && select.value !== "") {
+        addEquipmentItem();
+        lastRow = document.querySelector('#equipment-list .equipment-item:last-child');
+        select = lastRow.querySelector('select');
+      } else if (!lastRow) {
+        addEquipmentItem();
+        lastRow = document.querySelector('#equipment-list .equipment-item:last-child');
+        select = lastRow.querySelector('select');
+      }
+      
+      if (select) {
+        select.value = data.id;
+        // Trigger any change events if needed
+      }
+      
+    } else if (data.type === 'consumable') {
+      // Switch to consumables tab if not already there
+      switchTab('consumables');
+      
+      // Find an empty row or add a new one
+      let lastRow = document.querySelector('#consumables-list .consumable-item:last-child');
+      let select = lastRow ? lastRow.querySelector('select') : null;
+      
+      if (select && select.value !== "") {
+        addConsumableItem();
+        lastRow = document.querySelector('#consumables-list .consumable-item:last-child');
+        select = lastRow.querySelector('select');
+      } else if (!lastRow) {
+        addConsumableItem();
+        lastRow = document.querySelector('#consumables-list .consumable-item:last-child');
+        select = lastRow.querySelector('select');
+      }
+      
+      if (select) {
+        select.value = data.id;
+        // Consumables need extra info update
+        updateConsumableInfo(select);
+      }
+    }
+    
+    // Play success sound logic is already in barcode_scanner.html
+    // but we can add a small UI notification here if desired
+  };
+</script>
 {% endblock %}

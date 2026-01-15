@@ -11,17 +11,20 @@
       <h1 class="text-3xl font-bold mb-2">Lab Analytics Dashboard</h1>
       <p class="text-blue-100 text-lg">Equipment and consumable usage insights</p>
     </div>
-    <div class="flex items-center gap-3">
-      <a href="{{ url_for('export_analytics_pdf') }}" class="bg-white text-blue-600 px-4 py-2 rounded-lg font-semibold hover:bg-blue-50 transition flex items-center gap-2">
+    <div class="flex items-center gap-3 flex-wrap">
+      
+      <a href="{{ url_for('export_analytics_pdf', start_date=start_date, end_date=end_date) }}"
+        class="bg-white text-blue-600 px-4 py-2 rounded-lg font-semibold hover:bg-blue-50 transition flex items-center gap-2">
         <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
         </svg>
         Export PDF
       </a>
       <div class="hidden md:block">
         <div class="h-16 w-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
           <svg class="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
           </svg>
         </div>
       </div>
@@ -40,7 +43,8 @@
       </div>
       <div class="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
         <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
         </svg>
       </div>
     </div>
@@ -56,7 +60,8 @@
       </div>
       <div class="h-12 w-12 bg-purple-100 rounded-full flex items-center justify-center">
         <svg class="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20H4a2 2 0 01-2-2V9.414a1 1 0 01.293-.707l5.414-5.414a1 1 0 01.707-.293H20a2 2 0 012 2v13a2 2 0 01-2 2h-3"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M7 20H4a2 2 0 01-2-2V9.414a1 1 0 01.293-.707l5.414-5.414a1 1 0 01.707-.293H20a2 2 0 012 2v13a2 2 0 01-2 2h-3" />
         </svg>
       </div>
     </div>
@@ -72,7 +77,8 @@
       </div>
       <div class="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center">
         <svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3.414a2 2 0 01-2-2V4.414A2 2 0 013.414 2H21a2 2 0 012 2v13.172a2 2 0 01-2 2z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 4.354a4 4 0 110 5.292M15 21H3.414a2 2 0 01-2-2V4.414A2 2 0 013.414 2H21a2 2 0 012 2v13.172a2 2 0 01-2 2z" />
         </svg>
       </div>
     </div>
@@ -88,7 +94,7 @@
       </div>
       <div class="h-12 w-12 bg-orange-100 rounded-full flex items-center justify-center">
         <svg class="h-6 w-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
         </svg>
       </div>
     </div>
@@ -104,30 +110,32 @@
     <div class="flex items-center mb-4">
       <div class="h-10 w-10 bg-red-500 rounded-lg flex items-center justify-center mr-3">
         <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.464 0L4.35 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.464 0L4.35 16.5c-.77.833.192 2.5 1.732 2.5z" />
         </svg>
       </div>
       <h2 class="text-xl font-semibold text-gray-900">Low Stock Alert</h2>
     </div>
     <p class="text-sm text-gray-600 mb-4">Items with total available stock &lt; 10% of previous month</p>
-    
+
     {% if low_stock %}
-      <div class="space-y-2 max-h-64 overflow-y-auto">
-        {% for item in low_stock %}
-        <div class="flex justify-between items-center p-3 bg-red-50 rounded-lg border border-red-200">
-          <div>
-            <div class="font-medium text-gray-900">{{ item.description }}</div>
-            <div class="text-sm text-gray-600">{{ item.unit }}</div>
-          </div>
-          <div class="text-right">
-            <div class="text-red-600 font-semibold">{{ (item.items_out or 0) + (item.items_on_stock or 0) }}</div>
-            <div class="text-xs text-gray-500">of {{ item.previous_month_stock or 0 }} ({{ ((item.items_out or 0) + (item.items_on_stock or 0)) / (item.previous_month_stock or 1) * 100 | round(1) }}%)</div>
-          </div>
+    <div class="space-y-2 max-h-64 overflow-y-auto">
+      {% for item in low_stock %}
+      <div class="flex justify-between items-center p-3 bg-red-50 rounded-lg border border-red-200">
+        <div>
+          <div class="font-medium text-gray-900">{{ item.description }}</div>
+          <div class="text-sm text-gray-600">{{ item.unit }}</div>
         </div>
-        {% endfor %}
+        <div class="text-right">
+          <div class="text-red-600 font-semibold">{{ (item.items_out or 0) + (item.items_on_stock or 0) }}</div>
+          <div class="text-xs text-gray-500">of {{ item.previous_month_stock or 0 }} ({{ ((item.items_out or 0) +
+            (item.items_on_stock or 0)) / (item.previous_month_stock or 1) * 100 | round(1) }}%)</div>
+        </div>
       </div>
+      {% endfor %}
+    </div>
     {% else %}
-      <p class="text-gray-500 italic">No low stock items</p>
+    <p class="text-gray-500 italic">No low stock items</p>
     {% endif %}
   </div>
 
@@ -136,34 +144,37 @@
     <div class="flex items-center mb-4">
       <div class="h-10 w-10 bg-green-500 rounded-lg flex items-center justify-center mr-3">
         <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
         </svg>
       </div>
       <h2 class="text-xl font-semibold text-gray-900">Most Borrowed Equipment</h2>
     </div>
     <p class="text-sm text-gray-600 mb-4">Top 5 most requested items</p>
-    
+
     {% if most_borrowed %}
-      <div style="position: relative; height: 300px;">
-        <canvas id="borrowedEquipmentChart"></canvas>
-      </div>
-      <script>
+    <div style="position: relative; height: 300px;">
+      <canvas id="borrowedEquipmentChart"></canvas>
+    </div>
+    <script>
+      (function() {
         const borrowedCtx = document.getElementById('borrowedEquipmentChart').getContext('2d');
-        const borrowedData = {
-          labels: [{% for equipment, count in most_borrowed %}'{{ equipment.description }}'{{ ", " if not loop.last else "" }}{% endfor %}],
-          datasets: [{
-            label: 'Number of Borrows',
-            data: [{% for equipment, count in most_borrowed %}{{ count }}{{ ", " if not loop.last else "" }}{% endfor %}],
-            backgroundColor: 'rgba(34, 197, 94, 0.8)',
-            borderColor: 'rgba(22, 163, 74, 1)',
-            borderWidth: 2,
-            borderRadius: 8,
-            hoverBackgroundColor: 'rgba(22, 163, 74, 1)'
-          }]
-        };
+        const labels = [{% for equipment, count in most_borrowed %}{{ ((equipment.brand_name ~ ' ' if equipment.brand_name and equipment.brand_name != 'N/A' else '') ~ equipment.description ~ (' ' ~ equipment.model if equipment.model and equipment.model != 'N/A' else '')) | tojson }}{{ ", " if not loop.last else "" }}{% endfor %}];
+        const data = [{% for equipment, count in most_borrowed %}{{ count }}{{ ", " if not loop.last else "" }}{% endfor %}];
+        
         new Chart(borrowedCtx, {
           type: 'bar',
-          data: borrowedData,
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Number of Borrows',
+              data: data,
+              backgroundColor: 'rgba(34, 197, 94, 0.8)',
+              borderColor: 'rgba(22, 163, 74, 1)',
+              borderWidth: 2,
+              borderRadius: 8,
+              hoverBackgroundColor: 'rgba(22, 163, 74, 1)'
+            }]
+          },
           options: {
             responsive: true,
             maintainAspectRatio: false,
@@ -176,9 +187,10 @@
             }
           }
         });
-      </script>
+      })();
+    </script>
     {% else %}
-      <p class="text-gray-500 italic">No borrowing data available</p>
+    <p class="text-gray-500 italic">No borrowing data available</p>
     {% endif %}
   </div>
 
@@ -187,30 +199,31 @@
     <div class="flex items-center mb-4">
       <div class="h-10 w-10 bg-orange-500 rounded-lg flex items-center justify-center mr-3">
         <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
       </div>
       <h2 class="text-xl font-semibold text-gray-900">Near Expiration</h2>
     </div>
     <p class="text-sm text-gray-600 mb-4">Items expiring within 30 days</p>
-    
+
     {% if near_expiration %}
-      <div class="space-y-2 max-h-64 overflow-y-auto">
-        {% for item in near_expiration %}
-        <div class="flex justify-between items-center p-3 bg-orange-50 rounded-lg border border-orange-200">
-          <div>
-            <div class="font-medium text-gray-900">{{ item.description }}</div>
-            <div class="text-sm text-gray-600">Lot: {{ item.lot_number or 'N/A' }}</div>
-          </div>
-          <div class="text-right">
-            <div class="text-orange-600 font-semibold">{{ item.expiration }}</div>
-            <div class="text-xs text-gray-500">{{ item.items_on_stock or 0 }} in stock</div>
-          </div>
+    <div class="space-y-2 max-h-64 overflow-y-auto">
+      {% for item in near_expiration %}
+      <div class="flex justify-between items-center p-3 bg-orange-50 rounded-lg border border-orange-200">
+        <div>
+          <div class="font-medium text-gray-900">{{ item.description }}</div>
+          <div class="text-sm text-gray-600">Lot: {{ item.lot_number or 'N/A' }}</div>
         </div>
-        {% endfor %}
+        <div class="text-right">
+          <div class="text-orange-600 font-semibold">{{ item.expiration }}</div>
+          <div class="text-xs text-gray-500">{{ item.items_on_stock or 0 }} in stock</div>
+        </div>
       </div>
+      {% endfor %}
+    </div>
     {% else %}
-      <p class="text-gray-500 italic">No items expiring soon</p>
+    <p class="text-gray-500 italic">No items expiring soon</p>
     {% endif %}
   </div>
 
@@ -219,34 +232,38 @@
     <div class="flex items-center mb-4">
       <div class="h-10 w-10 bg-purple-500 rounded-lg flex items-center justify-center mr-3">
         <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
         </svg>
       </div>
       <h2 class="text-xl font-semibold text-gray-900">Top Consumed Items</h2>
     </div>
     <p class="text-sm text-gray-600 mb-4">Most used consumables</p>
-    
+
     {% if top_consumed %}
-      <div style="position: relative; height: 300px;">
-        <canvas id="consumedItemsChart"></canvas>
-      </div>
-      <script>
+    <div style="position: relative; height: 300px;">
+      <canvas id="consumedItemsChart"></canvas>
+    </div>
+    <script>
+      (function() {
         const consumedCtx = document.getElementById('consumedItemsChart').getContext('2d');
-        const consumedData = {
-          labels: [{% for item in top_consumed %}'{{ item.description }}'{{ ", " if not loop.last else "" }}{% endfor %}],
-          datasets: [{
-            label: 'Units Consumed',
-            data: [{% for item in top_consumed %}{{ item.units_consumed or 0 }}{{ ", " if not loop.last else "" }}{% endfor %}],
-            backgroundColor: 'rgba(168, 85, 247, 0.8)',
-            borderColor: 'rgba(126, 34, 206, 1)',
-            borderWidth: 2,
-            borderRadius: 8,
-            hoverBackgroundColor: 'rgba(126, 34, 206, 1)'
-          }]
-        };
+        const labels = [{% for item, count in top_consumed %}{{ item.description | tojson }}{{ ", " if not loop.last else "" }}{% endfor %}];
+        const data = [{% for item, count in top_consumed %}{{ count }}{{ ", " if not loop.last else "" }}{% endfor %}];
+
         new Chart(consumedCtx, {
           type: 'bar',
-          data: consumedData,
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Units Consumed',
+              data: data,
+              backgroundColor: 'rgba(168, 85, 247, 0.8)',
+              borderColor: 'rgba(126, 34, 206, 1)',
+              borderWidth: 2,
+              borderRadius: 8,
+              hoverBackgroundColor: 'rgba(126, 34, 206, 1)'
+            }]
+          },
           options: {
             responsive: true,
             maintainAspectRatio: false,
@@ -259,9 +276,10 @@
             }
           }
         });
-      </script>
+      })();
+    </script>
     {% else %}
-      <p class="text-gray-500 italic">No consumption data available</p>
+    <p class="text-gray-500 italic">No consumption data available</p>
     {% endif %}
   </div>
 
@@ -269,13 +287,32 @@
 
 <!-- Usage Trends Section -->
 <div class="bg-white rounded-xl shadow-lg border border-blue-100 p-6 mb-8">
-  <div class="flex items-center mb-6">
+  <div class="flex items-center mb-6 gap-2">
     <div class="h-10 w-10 bg-blue-500 rounded-lg flex items-center justify-center mr-3">
       <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
       </svg>
     </div>
-    <h2 class="text-xl font-semibold text-gray-900">Usage Trends (Last 30 Days)</h2>
+    <h2 class="text-xl font-semibold text-gray-900">Usage Trends</h2>
+    <div class="flex items-center gap-4">
+      <form action="{{ url_for('analytics') }}" method="GET" class="flex items-center gap-2 bg-gray-50 p-1 rounded-lg border">
+        <div class="flex items-center gap-2 px-2">
+          <label for="start_date" class="text-xs font-semibold text-gray-500 uppercase">From</label>
+          <input type="date" id="start_date" name="start_date" value="{{ start_date }}" 
+            class="bg-transparent border-none text-sm focus:ring-0 p-0 text-gray-700">
+        </div>
+        <div class="h-4 w-px bg-gray-300"></div>
+        <div class="flex items-center gap-2 px-2">
+          <label for="end_date" class="text-xs font-semibold text-gray-500 uppercase">To</label>
+          <input type="date" id="end_date" name="end_date" value="{{ end_date }}"
+            class="bg-transparent border-none text-sm focus:ring-0 p-0 text-gray-700">
+        </div>
+        <button type="submit" class="bg-blue-600 text-white px-3 py-1 rounded-md text-sm font-medium hover:bg-blue-700 transition">
+          Filter
+        </button>
+      </form>
+    </div>
   </div>
 
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -300,7 +337,7 @@
         const dailyBorrowsData = {{ daily_borrows | tojson }};
         const days = [];
         const borrowCounts = [];
-        
+
         // Create labels and data from daily_borrows
         const sortedDates = Object.keys(dailyBorrowsData).sort();
         sortedDates.forEach(dateStr => {
@@ -308,7 +345,7 @@
           days.push((date.getMonth() + 1) + '/' + date.getDate());
           borrowCounts.push(dailyBorrowsData[dateStr]);
         });
-        
+
         new Chart(borrowTrendCtx, {
           type: 'line',
           data: {
@@ -330,7 +367,7 @@
             responsive: true,
             maintainAspectRatio: false,
             plugins: { legend: { display: false } },
-            scales: { 
+            scales: {
               y: { beginAtZero: true, ticks: { stepSize: 1 } },
               x: { ticks: { autoSkip: true, maxRotation: 45, minRotation: 0 } }
             }
@@ -360,7 +397,7 @@
         const dailyUsageData = {{ daily_usage | tojson }};
         const days2 = [];
         const consumptionCounts = [];
-        
+
         // Create labels and data from daily_usage
         const sortedDates2 = Object.keys(dailyUsageData).sort();
         sortedDates2.forEach(dateStr => {
@@ -368,7 +405,7 @@
           days2.push((date.getMonth() + 1) + '/' + date.getDate());
           consumptionCounts.push(dailyUsageData[dateStr]);
         });
-        
+
         new Chart(consumptionTrendCtx, {
           type: 'line',
           data: {
@@ -390,7 +427,7 @@
             responsive: true,
             maintainAspectRatio: false,
             plugins: { legend: { display: false } },
-            scales: { 
+            scales: {
               y: { beginAtZero: true, ticks: { stepSize: 1 } },
               x: { ticks: { autoSkip: true, maxRotation: 45, minRotation: 0 } }
             }
@@ -406,7 +443,8 @@
   <div class="flex items-center mb-6">
     <div class="h-10 w-10 bg-red-500 rounded-lg flex items-center justify-center mr-3">
       <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
     </div>
     <h2 class="text-xl font-semibold text-gray-900">Student Issues & Notes Tracking</h2>
@@ -436,9 +474,9 @@
     <div class="bg-blue-50 rounded-lg p-4 border border-blue-200">
       <p class="text-gray-600 text-sm">Resolution Rate</p>
       {% if all_notes_count > 0 %}
-        <p class="text-3xl font-bold text-blue-600">{{ (resolved_notes_count / all_notes_count * 100) | round(1) }}%</p>
+      <p class="text-3xl font-bold text-blue-600">{{ (resolved_notes_count / all_notes_count * 100) | round(1) }}%</p>
       {% else %}
-        <p class="text-3xl font-bold text-blue-600">N/A</p>
+      <p class="text-3xl font-bold text-blue-600">N/A</p>
       {% endif %}
     </div>
   </div>
@@ -467,9 +505,11 @@
       <div class="flex items-start justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
         <div class="flex-1">
           <div class="font-medium text-gray-900">{{ note.description }}</div>
-          <div class="text-sm text-gray-600">{{ note.note_type | capitalize }} • {{ note.equipment.description if note.equipment else (note.consumable.description if note.consumable else 'N/A') }}</div>
+          <div class="text-sm text-gray-600">{{ note.note_type | capitalize }} • {{ note.equipment.description if
+            note.equipment else (note.consumable.description if note.consumable else 'N/A') }}</div>
         </div>
-        <span class="ml-2 px-2 py-1 rounded text-xs font-semibold {% if note.status == 'pending' %}bg-yellow-100 text-yellow-800{% else %}bg-green-100 text-green-800{% endif %}">
+        <span
+          class="ml-2 px-2 py-1 rounded text-xs font-semibold {% if note.status == 'pending' %}bg-yellow-100 text-yellow-800{% else %}bg-green-100 text-green-800{% endif %}">
           {{ note.status | capitalize }}
         </span>
       </div>
@@ -477,7 +517,7 @@
     </div>
   </div>
   {% else %}
-    <p class="text-gray-500 italic">No recent issues reported</p>
+  <p class="text-gray-500 italic">No recent issues reported</p>
   {% endif %}
 </div>
 
@@ -489,8 +529,7 @@
       <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
           d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
       </svg>
     </div>
     <h2 class="text-xl font-semibold text-gray-900">Equipment Maintenance Tracking</h2>
@@ -549,7 +588,7 @@
       const maintenanceTypeCtx = document.getElementById('maintenanceTypeChart').getContext('2d');
       const maintenanceTypes = {{ maintenance_by_type.keys() | list | tojson }};
       const maintenanceCounts = {{ maintenance_by_type.values() | list | tojson }};
-      
+
       new Chart(maintenanceTypeCtx, {
         type: 'doughnut',
         data: {
@@ -592,18 +631,29 @@
   <!-- Recent Maintenance -->
   {% if recent_maintenance %}
   <div>
-    <h3 class="font-semibold text-gray-900 mb-3">Recent Maintenance (Last 30 Days)</h3>
+    <h3 class="font-semibold text-gray-900 mb-3">Recent Maintenance (Selected Period)</h3>
     <div class="space-y-2 max-h-48 overflow-y-auto">
       {% for m in recent_maintenance %}
       <div class="flex items-start justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
         <div class="flex-1">
-          <div class="font-medium text-gray-900">{{ m.equipment.description if m.equipment else 'Unknown Equipment' }}</div>
-          <div class="text-sm text-gray-600">{{ m.maintenance_type | capitalize }} • Scheduled: {{ m.scheduled_date }}</div>
+          <div class="font-medium text-gray-900">
+            {% if m.equipment %}
+              {% if m.equipment.brand_name and m.equipment.brand_name != 'N/A' %}{{ m.equipment.brand_name }} {% endif %}
+              {{ m.equipment.description }}
+              {% if m.equipment.model and m.equipment.model != 'N/A' %} {{ m.equipment.model }}{% endif %}
+              {% if m.equipment.serial_number and m.equipment.serial_number != 'N/A' %}<span class="text-xs text-gray-500 block">S/N: {{ m.equipment.serial_number }}</span>{% endif %}
+            {% else %}
+              Unknown Equipment
+            {% endif %}
+          </div>
+          <div class="text-sm text-gray-600">{{ m.maintenance_type | capitalize }} • Scheduled: {{ m.scheduled_date }}
+          </div>
           {% if m.cost %}
           <div class="text-xs text-gray-500">Cost: ₱{{ "{:,.2f}".format(m.cost) }}</div>
           {% endif %}
         </div>
-        <span class="ml-2 px-2 py-1 rounded text-xs font-semibold {% if m.status == 'completed' %}bg-green-100 text-green-800{% elif m.status == 'overdue' %}bg-red-100 text-red-800{% else %}bg-blue-100 text-blue-800{% endif %}">
+        <span
+          class="ml-2 px-2 py-1 rounded text-xs font-semibold {% if m.status == 'completed' %}bg-green-100 text-green-800{% elif m.status == 'overdue' %}bg-red-100 text-red-800{% else %}bg-blue-100 text-blue-800{% endif %}">
           {{ m.status | capitalize }}
         </span>
       </div>
@@ -611,7 +661,7 @@
     </div>
   </div>
   {% else %}
-    <p class="text-gray-500 italic">No recent maintenance records</p>
+  <p class="text-gray-500 italic">No recent maintenance records</p>
   {% endif %}
 </div>
 {% endif %}

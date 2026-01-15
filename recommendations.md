@@ -1,37 +1,24 @@
-## 📋 Combined Technical Review Notes
+### **RESEARCH TITLE:** **Development of a Laboratory Information System with Data Visualization for College of Medical Technology Unit at Trinity University of Asia**
 
-### I. General System Requirements & Reporting
-
-* The system must generate both **transactional reports** and **MIS reports** (for management decision-making).
-* Reports should include:
-    * **Inventory status report**
-    * **Master list report**
-    * **Stock movement report**
-    * **Report on items with high/low turnover**
-    * **Stock-in/stock-out report**
-    * **Inventory audit trail report**
-* Basic functions like **sorting and filtering** are essential for summarizing data.
-* Reports should be **system-generated** with minimal human intervention to maintain **data integrity** and reduce errors.
-* An **LIS** (Laboratory Information System) should streamline manual record-keeping by converting it to electronic forms and automating **inventory tracking** and statistics on equipment and consumables usage.
-
----
-
-### II. Key Modules and Features
-
-| Feature | Requirement / Recommendation |
-| :--- | :--- |
-| **Notification & Alerts** | Monitor status of laboratory equipment/apparatus, including **operational, calibration, and maintenance status.** |
-| **Data Visualization** | This is a key feature. It must support **progressive data accumulation** to generate insights from current and **historical trends**. Analytics should support **long-term monitoring, forecasting, and decision-making**. The system should include **well-designed dashboards** and reports. |
-| **Authentication** | User authentication must be explicitly input with a **secure authentication mechanism** to highlight the importance of **data security** and **controlled access** to records. |
-| **Reports for Budgeting** | Generate reports that support budgeting, such as **monthly or semester-based consumption** summaries for the Dean. |
-| **Barcode/Tagging** | Integrate a **barcode-based tracking feature** for both equipment and consumable items to reduce turnaround time and lessen manual logging errors. |
-
----
-
-### III. Technical Review Panel Member 2 Recommendations
-
-1.  Include a **Maintenance Table** for the laboratory equipment.
-2.  Provide **report generation by category**.
-3.  Include **barcode tagging** for the equipment and others.
-4.  Include **backup for data recovery**.
-5.  Include **aging/expiration notification**.
+| REVISION REQUIREMENTS | STATUS |
+| --- | --- |
+| **PANEL 1** |  |
+| Report Generation - The system must generate standard reports (see the list below) for an inventory system. | Done |
+| Notification & Alerts - Please consider also monitoring the status of laboratory equipment/apparatus, which could include operational status, calibration status, maintenance status, etc. | Done |
+| Data Visualization - This module should serve as one of the system's key features. Design the data visualization component to support progressive data accumulation, enabling the system to generate insights not only from current records but also from historical trends as the database grows. The analytics should support long-term monitoring, forecasting, and decision-making. | Done |
+| User Acceptance Testing - Should be supplemented with additional evaluation methods. It is recommended to conduct a System Usability Scale (SUS) test with actual end-users to assess usability, and to perform black-box testing carried out by third-party IT experts, preferably those referred by Dir. Lagdaan. These additional tests will strengthen the system's reliability, usability, and overall technical quality. | Done |
+| **PANEL 2** |  |
+| Include Maintenance Table for the laboratory equipment | Done |
+| Come up with report generation by category | Done |
+| Include barcode tagging for the equipment and others | Done |
+| Include backup for data recovery | Done |
+| Include aging/expiration notification | Done |
+| **PANEL 3** |  |
+| Recommending the integration of barcode-based tracking feature for both equipment and consumable items. This will significantly reduce the turnaround time for issuing and returning items to students and will lessen the manual logging errors for laboratory technician. | Done |
+| Second, since one of the main objectives is to provide data visualization, the system should include well-designed dashboards and reports that support the daily work of the laboratory staff. An LIS should streamline manual record-keeping by converting it into electronic forms, automating the tracking of inventory levels and providing clear statistics on laboratory equipment and consumables usage. | Done |
+| Generating reports that specifically support budgeting and resource planning such as summaries of monthly or semester-based consumption. These will be useful for the Dean in preparing the budget and avoiding stock shortages. | Done |
+| In terms of user interface, certain fields such as item unit (box, bottle, piece, etc.) would be better implemented as dropdown selections rather than free-text inputs. This will improve data consistency and reduce encoding errors. | Done |
+| Since there are two laboratory technicians using the system, it would be helpful to track their individual logs. This will support accountability, traceability, and clearer monitoring of workload and responsibilities. | Done |
+| In the conceptual framework, user authentication should be explicitly input with secure authentication mechanism which is reflected in the output. This will highlight the importance of data security and controlled access to laboratory records. | Done |
+| **URDC** |  |
+| Include the target users of the system which may include the CMT personnel - faculty, department head, and Unit Head in the evaluation of the system. If it is possible, also include laboratory technicians from other academic units. | Done |

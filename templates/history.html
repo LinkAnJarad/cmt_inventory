@@ -14,9 +14,29 @@
         <p class="text-indigo-100 text-sm">Comprehensive tracking of lab equipment and consumable usage</p>
       </div>
     </div>
-    <!-- Export PDF Button -->
-    <div class="flex items-center">
-      <a href="{{ url_for('export_history_pdf', b_q=b_q, b_sort=b_sort, b_dir=b_dir, u_q=u_q, u_sort=u_sort, u_dir=u_dir) }}"
+    <!-- Global Filters & Export -->
+    <div class="flex items-center gap-4 flex-wrap">
+      <form method="GET" action="{{ url_for('history') }}" class="flex items-center gap-2 bg-white bg-opacity-10 p-2 rounded-lg">
+        <div class="flex flex-col">
+          <label class="text-[10px] uppercase font-bold text-indigo-200">Start Date</label>
+          <input type="date" name="start_date" value="{{ start_date }}" class="bg-transparent text-white border-0 p-0 text-sm focus:ring-0">
+        </div>
+        <div class="w-px h-6 bg-indigo-400 mx-1"></div>
+        <div class="flex flex-col">
+          <label class="text-[10px] uppercase font-bold text-indigo-200">End Date</label>
+          <input type="date" name="end_date" value="{{ end_date }}" class="bg-transparent text-white border-0 p-0 text-sm focus:ring-0">
+        </div>
+        <button type="submit" class="ml-2 bg-white text-indigo-700 px-3 py-1 rounded-md text-sm font-bold hover:bg-indigo-50 transition-colors">
+          Filter
+        </button>
+        {% if start_date or end_date %}
+        <a href="{{ url_for('history') }}" class="text-indigo-200 hover:text-white text-xs px-2">Clear</a>
+        {% endif %}
+      </form>
+
+      <div class="h-10 w-px bg-indigo-400"></div>
+
+      <a href="{{ url_for('export_history_pdf', b_q=b_q, b_sort=b_sort, b_dir=b_dir, u_q=u_q, u_sort=u_sort, u_dir=u_dir, start_date=start_date, end_date=end_date) }}"
          class="group flex items-center space-x-2 bg-white bg-opacity-10 hover:bg-opacity-20 px-4 py-3 rounded-lg text-white hover:text-indigo-100 font-medium transition-all duration-200 shadow-lg"
          title="Export both sections to a single PDF">
         <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -24,6 +44,71 @@
         </svg>
         <span>Export PDF</span>
       </a>
+    </div>
+  </div>
+</div>
+
+<!-- Monthly Usage Summary Section -->
+<div class="mb-8">
+  <div class="bg-white rounded-xl shadow-lg border border-indigo-100 p-6 medical-shadow">
+    <div class="flex items-center space-x-3 mb-6">
+      <div class="h-8 w-8 bg-indigo-100 rounded-lg flex items-center justify-center">
+        <svg class="h-5 w-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+        </svg>
+      </div>
+      <h2 class="text-xl font-semibold text-gray-800">Monthly Usage Summary</h2>
+    </div>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div class="col-span-1 lg:col-span-2 overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200 border border-gray-100 rounded-lg">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Month</th>
+              <th class="px-6 py-3 text-center text-xs font-bold text-gray-500 uppercase">Items Used (Consumables)</th>
+              <th class="px-6 py-3 text-center text-xs font-bold text-gray-500 uppercase">Items Borrowed (Equipment)</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-100">
+            {% for item in summary_list %}
+            <tr class="hover:bg-indigo-50 transition-colors">
+              <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                {{ item.month }}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-center font-medium text-blue-600">
+                {{ item.used }}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-center font-medium text-green-600">
+                {{ item.borrowed }}
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="3" class="px-6 py-8 text-center text-gray-500">No usage records found.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      
+      <div class="bg-indigo-50 rounded-xl p-6 border border-indigo-100 flex flex-col justify-center">
+        <h3 class="text-indigo-800 font-bold mb-2">About Monthly Summary</h3>
+        <p class="text-sm text-indigo-700 leading-relaxed">
+          This table provides a high-level overview of lab activity grouped by month. 
+          Use the date filters above to narrow down the detailed logs below.
+        </p>
+        <div class="mt-4 flex items-center space-x-4">
+            <div class="flex items-center">
+                <div class="h-3 w-3 bg-blue-600 rounded-full mr-2"></div>
+                <span class="text-xs text-indigo-900">Consumables</span>
+            </div>
+            <div class="flex items-center">
+                <div class="h-3 w-3 bg-green-600 rounded-full mr-2"></div>
+                <span class="text-xs text-indigo-900">Equipment</span>
+            </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -62,10 +147,12 @@
       </div>
       <input type="hidden" name="b_sort" value="{{ b_sort|default('borrowed_at') }}">
       <input type="hidden" name="b_dir" value="{{ b_dir|default('desc') }}">
-      <!-- Preserve usage table state -->
+      <!-- Preserve usage table and date state -->
       <input type="hidden" name="u_q" value="{{ u_q|default('') }}">
       <input type="hidden" name="u_sort" value="{{ u_sort|default('used_at') }}">
       <input type="hidden" name="u_dir" value="{{ u_dir|default('desc') }}">
+      <input type="hidden" name="start_date" value="{{ start_date }}">
+      <input type="hidden" name="end_date" value="{{ end_date }}">
       <button type="submit" class="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-lg hover:from-green-700 hover:to-green-800 font-medium transition duration-200 shadow-lg">
         Search
       </button>
@@ -251,10 +338,12 @@
       </div>
       <input type="hidden" name="u_sort" value="{{ u_sort|default('used_at') }}">
       <input type="hidden" name="u_dir" value="{{ u_dir|default('desc') }}">
-      <!-- Preserve borrow table state -->
+      <!-- Preserve borrow table and date state -->
       <input type="hidden" name="b_q" value="{{ b_q|default('') }}">
       <input type="hidden" name="b_sort" value="{{ b_sort|default('borrowed_at') }}">
       <input type="hidden" name="b_dir" value="{{ b_dir|default('desc') }}">
+      <input type="hidden" name="start_date" value="{{ start_date }}">
+      <input type="hidden" name="end_date" value="{{ end_date }}">
       <button type="submit" class="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-lg hover:from-blue-700 hover:to-blue-800 font-medium transition duration-200 shadow-lg">
         Search
       </button>
