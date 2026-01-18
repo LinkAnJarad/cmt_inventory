@@ -1599,9 +1599,9 @@ def history():
 @app.route('/history/export/pdf')
 def export_history_pdf():
     """
-    Export the current history view for both sections (borrowing and usage)
-    into a single PDF with text wrapping, respecting all filters and sorts.
+    Export based on target (equipment, consumables, or all)
     """
+    target = request.args.get('target', 'all')
     if session.get('role') not in ['admin', 'tech']:
         return redirect(url_for('dashboard'))
 
@@ -1619,70 +1619,76 @@ def export_history_pdf():
     start_date = request.args.get('start_date', '')
     end_date = request.args.get('end_date', '')
 
-    # Borrowing params
-    b_q = request.args.get('b_q', '').strip()
-    b_sort = request.args.get('b_sort', 'borrowed_at')
-    b_dir = request.args.get('b_dir', 'desc').lower()
-    b_dir = 'desc' if b_dir == 'desc' else 'asc'
+    borrows = []
+    usages = []
+    summary = []
 
-    # Usage params
-    u_q = request.args.get('u_q', '').strip()
-    u_sort = request.args.get('u_sort', 'used_at')
-    u_dir = request.args.get('u_dir', 'desc').lower()
-    u_dir = 'desc' if u_dir == 'desc' else 'asc'
+    # Build borrows query if needed
+    if target in ['all', 'equipment']:
+        b_q = request.args.get('b_q', '').strip()
+        b_sort = request.args.get('b_sort', 'borrowed_at')
+        b_dir = request.args.get('b_dir', 'desc').lower()
+        b_dir = 'desc' if b_dir == 'desc' else 'asc'
 
-    # Build borrows query
-    b_query = BorrowLog.query.outerjoin(Equipment)
-    if start_date:
-        b_query = b_query.filter(BorrowLog.borrowed_at >= datetime.strptime(start_date, '%Y-%m-%d'))
-    if end_date:
-        b_query = b_query.filter(BorrowLog.borrowed_at <= datetime.strptime(end_date + ' 23:59:59', '%Y-%m-%d %H:%M:%S'))
+        b_query = BorrowLog.query.outerjoin(Equipment)
+        if start_date:
+            b_query = b_query.filter(BorrowLog.borrowed_at >= datetime.strptime(start_date, '%Y-%m-%d'))
+        if end_date:
+            b_query = b_query.filter(BorrowLog.borrowed_at <= datetime.strptime(end_date + ' 23:59:59', '%Y-%m-%d %H:%M:%S'))
 
-    if b_q:
-        like = f"%{b_q}%"
-        b_query = b_query.filter(or_(
-            BorrowLog.borrower_name.ilike(like),
-            BorrowLog.borrower_type.ilike(like),
-            BorrowLog.section_course.ilike(like),
-            BorrowLog.purpose.ilike(like),
-            Equipment.description.ilike(like),
-        ))
+        if b_q:
+            like = f"%{b_q}%"
+            b_query = b_query.filter(or_(
+                BorrowLog.borrower_name.ilike(like),
+                BorrowLog.borrower_type.ilike(like),
+                BorrowLog.section_course.ilike(like),
+                BorrowLog.purpose.ilike(like),
+                Equipment.description.ilike(like),
+            ))
 
-    b_sort_col = getattr(BorrowLog, b_sort) if b_sort != 'equipment' else Equipment.description
-    b_query = b_query.order_by(b_sort_col.desc() if b_dir == 'desc' else b_sort_col.asc())
-    borrows = b_query.all()
+        b_sort_col = getattr(BorrowLog, b_sort) if b_sort != 'equipment' else Equipment.description
+        b_query = b_query.order_by(b_sort_col.desc() if b_dir == 'desc' else b_sort_col.asc())
+        borrows = b_query.all()
 
-    # Build usages query
-    u_query = UsageLog.query.outerjoin(Consumable)
-    if start_date:
-        u_query = u_query.filter(UsageLog.used_at >= datetime.strptime(start_date, '%Y-%m-%d'))
-    if end_date:
-        u_query = u_query.filter(UsageLog.used_at <= datetime.strptime(end_date + ' 23:59:59', '%Y-%m-%d %H:%M:%S'))
+    # Build usages query if needed
+    if target in ['all', 'consumables']:
+        u_q = request.args.get('u_q', '').strip()
+        u_sort = request.args.get('u_sort', 'used_at')
+        u_dir = request.args.get('u_dir', 'desc').lower()
+        u_dir = 'desc' if u_dir == 'desc' else 'asc'
 
-    if u_q:
-        like = f"%{u_q}%"
-        u_query = u_query.filter(or_(
-            UsageLog.user_name.ilike(like),
-            UsageLog.user_type.ilike(like),
-            UsageLog.section_course.ilike(like),
-            UsageLog.purpose.ilike(like),
-            Consumable.description.ilike(like),
-        ))
+        u_query = UsageLog.query.outerjoin(Consumable)
+        if start_date:
+            u_query = u_query.filter(UsageLog.used_at >= datetime.strptime(start_date, '%Y-%m-%d'))
+        if end_date:
+            u_query = u_query.filter(UsageLog.used_at <= datetime.strptime(end_date + ' 23:59:59', '%Y-%m-%d %H:%M:%S'))
 
-    u_sort_col = getattr(UsageLog, u_sort) if u_sort != 'consumable' else Consumable.description
-    u_query = u_query.order_by(u_sort_col.desc() if u_dir == 'desc' else u_sort_col.asc())
-    usages = u_query.all()
+        if u_q:
+            like = f"%{u_q}%"
+            u_query = u_query.filter(or_(
+                UsageLog.user_name.ilike(like),
+                UsageLog.user_type.ilike(like),
+                UsageLog.section_course.ilike(like),
+                UsageLog.purpose.ilike(like),
+                Consumable.description.ilike(like),
+            ))
 
-    # Monthly Stats (for summary table in PDF)
-    m_usage = db.session.query(func.strftime('%Y-%m', UsageLog.used_at).label('m'), func.sum(UsageLog.quantity_used)).group_by('m').all()
-    m_borrow = db.session.query(func.strftime('%Y-%m', BorrowLog.borrowed_at).label('m'), func.sum(BorrowLog.quantity_borrowed)).group_by('m').all()
-    
-    s_dict = {}
-    for m, c in m_usage: s_dict[m] = {'u': c, 'b': 0}
-    for m, c in m_borrow:
-        if m in s_dict: s_dict[m]['b'] = c
-        else: s_dict[m] = {'u': 0, 'b': c}
-    summary = [{'m': k, 'u': s_dict[k]['u'], 'b': s_dict[k]['b']} for k in sorted(s_dict.keys(), reverse=True)]
+        u_sort_col = getattr(UsageLog, u_sort) if u_sort != 'consumable' else Consumable.description
+        u_query = u_query.order_by(u_sort_col.desc() if u_dir == 'desc' else u_sort_col.asc())
+        usages = u_query.all()
+
+    # Monthly Stats (if target is all or we want it in every report)
+    # Let's only include summary if target is 'all'
+    if target == 'all':
+        m_usage = db.session.query(func.strftime('%Y-%m', UsageLog.used_at).label('m'), func.sum(UsageLog.quantity_used)).group_by('m').all()
+        m_borrow = db.session.query(func.strftime('%Y-%m', BorrowLog.borrowed_at).label('m'), func.sum(BorrowLog.quantity_borrowed)).group_by('m').all()
+        
+        s_dict = {}
+        for m, c in m_usage: s_dict[m] = {'u': c, 'b': 0}
+        for m, c in m_borrow:
+            if m in s_dict: s_dict[m]['b'] = c
+            else: s_dict[m] = {'u': 0, 'b': c}
+        summary = [{'m': k, 'u': s_dict[k]['u'], 'b': s_dict[k]['b']} for k in sorted(s_dict.keys(), reverse=True)]
 
     # Build PDF
     buffer = io.BytesIO()
@@ -1720,10 +1726,19 @@ def export_history_pdf():
             return Paragraph("", header_style if is_header else cell_style)
         return Paragraph(str(text), header_style if is_header else cell_style)
 
+    def sval(x):
+        """Helper to return empty string for None values"""
+        return "" if x is None else str(x)
+
     elements = []
 
     # Title/meta
-    elements.append(Paragraph("Usage & Borrowing History Report", styles["Title"]))
+    title_map = {
+        'all': 'Usage & Borrowing History Report',
+        'equipment': 'Equipment Borrowing History Report',
+        'consumables': 'Consumables Usage History Report'
+    }
+    elements.append(Paragraph(title_map.get(target, 'History Report'), styles["Title"]))
     if start_date or end_date:
         range_text = f"Date Range: {start_date or 'Beginning'} to {end_date or 'Present'}"
         elements.append(Paragraph(range_text, styles["Normal"]))
@@ -1734,137 +1749,130 @@ def export_history_pdf():
     ))
     elements.append(Spacer(1, 12))
 
-    # --- NEW: Monthly Usage Summary Table ---
-    elements.append(Paragraph("Monthly Usage Summary", styles["Heading2"]))
-    elements.append(Spacer(1, 6))
-    
-    summary_headers = [
-        create_paragraph("Month", is_header=True),
-        create_paragraph("Total Items Used (Consumables)", is_header=True),
-        create_paragraph("Total Items Borrowed (Equipment)", is_header=True)
-    ]
-    summary_data_pdf = [summary_headers]
-    for item in summary:
-        summary_data_pdf.append([
-            create_paragraph(item['m']),
-            create_paragraph(item['u']),
-            create_paragraph(item['b'])
-        ])
-    
-    summary_table = Table(summary_data_pdf, colWidths=[150, 250, 250])
-    summary_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3F4F6")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),
-        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-    ]))
-    elements.append(summary_table)
-    elements.append(Spacer(1, 24))
+    # --- Monthly Usage Summary Table (Only for ALL) ---
+    if target == 'all' and summary:
+        elements.append(Paragraph("Monthly Usage Summary", styles["Heading2"]))
+        elements.append(Spacer(1, 6))
+        
+        summary_headers = [
+            create_paragraph("Month", is_header=True),
+            create_paragraph("Total Items Used (Consumables)", is_header=True),
+            create_paragraph("Total Items Borrowed (Equipment)", is_header=True)
+        ]
+        summary_data_pdf = [summary_headers]
+        for item in summary:
+            summary_data_pdf.append([
+                create_paragraph(item['m']),
+                create_paragraph(item['u']),
+                create_paragraph(item['b'])
+            ])
+        
+        summary_table = Table(summary_data_pdf, colWidths=[150, 250, 250])
+        summary_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3F4F6")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ]))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 24))
 
     # Borrowing section
-    elements.append(Paragraph("Equipment Borrowing", styles["Heading2"]))
-    elements.append(Spacer(1, 6))
-    
-    # Updated headers for borrowing
-    borrow_headers = [
-        "Borrower", "Type", "Section + Course", "Purpose", 
-        "Equipment", "Quantity", "Borrowed At", "Returned At"
-    ]
+    if target in ['all', 'equipment'] and borrows:
+        elements.append(Paragraph("Equipment Borrowing", styles["Heading2"]))
+        elements.append(Spacer(1, 6))
+        
+        borrow_headers = [
+            "Borrower", "Type", "Section + Course", "Purpose", 
+            "Equipment", "Quantity", "Borrowed At", "Returned At"
+        ]
 
-    def sval(x):
-        return "" if x is None else str(x)
+        borrow_header_row = [create_paragraph(header, is_header=True) for header in borrow_headers]
+        borrow_data = [borrow_header_row]
+        
+        for log in borrows:
+            borrow_data.append([
+                create_paragraph(sval(log.borrower_name)),
+                create_paragraph(sval(log.borrower_type.title() if log.borrower_type else "")),
+                create_paragraph(sval(log.section_course)),
+                create_paragraph(sval(log.purpose)),
+                create_paragraph(sval(log.equipment.description if log.equipment else "—")),
+                create_paragraph(sval(log.quantity_borrowed)),
+                create_paragraph(sval(log.borrowed_at)),
+                create_paragraph(sval(log.returned_at if log.returned_at else "—")),
+            ])
 
-    # Create header row with Paragraph objects
-    borrow_header_row = [create_paragraph(header, is_header=True) for header in borrow_headers]
-    borrow_data = [borrow_header_row]
-    
-    for log in borrows:
-        borrow_data.append([
-            create_paragraph(sval(log.borrower_name)),
-            create_paragraph(sval(log.borrower_type.title() if log.borrower_type else "")),
-            create_paragraph(sval(log.section_course)),
-            create_paragraph(sval(log.purpose)),
-            create_paragraph(sval(log.equipment.description if log.equipment else "—")),
-            create_paragraph(sval(log.quantity_borrowed)),
-            create_paragraph(sval(log.borrowed_at)),
-            create_paragraph(sval(log.returned_at if log.returned_at else "—")),
-        ])
+        borrow_col_widths = [120, 60, 100, 140, 120, 50, 100, 100]
+        borrow_table = Table(borrow_data, repeatRows=1, colWidths=borrow_col_widths)
+        borrow_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3F4F6")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),
+            ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, 0), 9),
+            ("FONTSIZE", (0, 1), (-1, -1), 8),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#FAFAFA")]),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D1D5DB")),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING", (0, 0), (-1, -1), 3),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ]))
+        elements.append(borrow_table)
 
-    # Define column widths for borrowing table
-    borrow_col_widths = [120, 60, 100, 140, 120, 50, 100, 100]
-
-    borrow_table = Table(borrow_data, repeatRows=1, colWidths=borrow_col_widths)
-    borrow_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3F4F6")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),
-        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),  # Top alignment for better text wrapping
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, 0), 9),
-        ("FONTSIZE", (0, 1), (-1, -1), 8),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#FAFAFA")]),
-        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D1D5DB")),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ("LEFTPADDING", (0, 0), (-1, -1), 3),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
-    ]))
-    elements.append(borrow_table)
-
-    # Page break between sections for clarity
-    elements.append(PageBreak())
+    if target == 'all' and borrows and usages:
+        elements.append(PageBreak())
 
     # Usage section
-    elements.append(Paragraph("Consumables Usage", styles["Heading2"]))
-    elements.append(Spacer(1, 6))
-    
-    # Updated headers for usage
-    usage_headers = [
-        "User", "Type", "Section + Course", "Purpose",
-        "Consumable", "Quantity Used", "Used At"
-    ]
-    
-    # Create header row with Paragraph objects
-    usage_header_row = [create_paragraph(header, is_header=True) for header in usage_headers]
-    usage_data = [usage_header_row]
-    
-    for log in usages:
-        usage_data.append([
-            create_paragraph(sval(log.user_name)),
-            create_paragraph(sval(log.user_type.title() if log.user_type else "")),
-            create_paragraph(sval(log.section_course)),
-            create_paragraph(sval(log.purpose)),
-            create_paragraph(sval(log.consumable.description if log.consumable else "—")),
-            create_paragraph(sval(log.quantity_used)),
-            create_paragraph(sval(log.used_at)),
-        ])
+    if target in ['all', 'consumables'] and usages:
+        elements.append(Paragraph("Consumables Usage", styles["Heading2"]))
+        elements.append(Spacer(1, 6))
+        
+        usage_headers = [
+            "User", "Type", "Section + Course", "Purpose",
+            "Consumable", "Quantity Used", "Used At"
+        ]
+        
+        usage_header_row = [create_paragraph(header, is_header=True) for header in usage_headers]
+        usage_data = [usage_header_row]
+        
+        for log in usages:
+            usage_data.append([
+                create_paragraph(sval(log.user_name)),
+                create_paragraph(sval(log.user_type.title() if log.user_type else "")),
+                create_paragraph(sval(log.section_course)),
+                create_paragraph(sval(log.purpose)),
+                create_paragraph(sval(log.consumable.description if log.consumable else "—")),
+                create_paragraph(sval(log.quantity_used)),
+                create_paragraph(sval(log.used_at)),
+            ])
 
-    # Define column widths for usage table
-    usage_col_widths = [120, 60, 100, 160, 150, 80, 100]
-
-    usage_table = Table(usage_data, repeatRows=1, colWidths=usage_col_widths)
-    usage_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3F4F6")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),
-        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),  # Top alignment for better text wrapping
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, 0), 9),
-        ("FONTSIZE", (0, 1), (-1, -1), 8),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#FAFAFA")]),
-        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D1D5DB")),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ("LEFTPADDING", (0, 0), (-1, -1), 3),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
-    ]))
-    elements.append(usage_table)
+        usage_col_widths = [120, 60, 100, 160, 150, 80, 100]
+        usage_table = Table(usage_data, repeatRows=1, colWidths=usage_col_widths)
+        usage_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3F4F6")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),
+            ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, 0), 9),
+            ("FONTSIZE", (0, 1), (-1, -1), 8),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#FAFAFA")]),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D1D5DB")),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING", (0, 0), (-1, -1), 3),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ]))
+        elements.append(usage_table)
 
     doc.build(elements)
 
     buffer.seek(0)
-    filename = f"history_report_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.pdf"
+    ts = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+    filename = f"history_{target}_{ts}.pdf"
     return send_file(
         buffer,
         mimetype="application/pdf",

@@ -36,14 +36,26 @@
 
       <div class="h-10 w-px bg-indigo-400"></div>
 
-      <a href="{{ url_for('export_history_pdf', b_q=b_q, b_sort=b_sort, b_dir=b_dir, u_q=u_q, u_sort=u_sort, u_dir=u_dir, start_date=start_date, end_date=end_date) }}"
-         class="group flex items-center space-x-2 bg-white bg-opacity-10 hover:bg-opacity-20 px-4 py-3 rounded-lg text-white hover:text-indigo-100 font-medium transition-all duration-200 shadow-lg"
-         title="Export both sections to a single PDF">
-        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-        </svg>
-        <span>Export PDF</span>
-      </a>
+      <div class="flex items-center space-x-2 pl-4">
+        <span class="text-[10px] uppercase font-bold text-indigo-200 block mb-1">Export PDF:</span>
+        <div class="flex space-x-1">
+          <a href="{{ url_for('export_history_pdf', target='all', b_q=b_q, b_sort=b_sort, b_dir=b_dir, u_q=u_q, u_sort=u_sort, u_dir=u_dir, start_date=start_date, end_date=end_date) }}"
+             class="flex items-center space-x-1 bg-white bg-opacity-10 hover:bg-opacity-20 px-3 py-2 rounded-lg text-white text-xs font-medium transition-all shadow-md"
+             title="Export both sections to a single PDF">
+            <span>All</span>
+          </a>
+          <a href="{{ url_for('export_history_pdf', target='equipment', b_q=b_q, b_sort=b_sort, b_dir=b_dir, start_date=start_date, end_date=end_date) }}"
+             class="flex items-center space-x-1 bg-white bg-opacity-10 hover:bg-opacity-20 px-3 py-2 rounded-lg text-white text-xs font-medium transition-all shadow-md"
+             title="Export Equipment Borrowing only">
+            <span>Equipment</span>
+          </a>
+          <a href="{{ url_for('export_history_pdf', target='consumables', u_q=u_q, u_sort=u_sort, u_dir=u_dir, start_date=start_date, end_date=end_date) }}"
+             class="flex items-center space-x-1 bg-white bg-opacity-10 hover:bg-opacity-20 px-3 py-2 rounded-lg text-white text-xs font-medium transition-all shadow-md"
+             title="Export Consumables Usage only">
+            <span>Consumables</span>
+          </a>
+        </div>
+      </div>
     </div>
   </div>
 </div>
