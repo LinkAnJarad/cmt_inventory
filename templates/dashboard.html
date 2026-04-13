@@ -174,7 +174,7 @@
             <div class="flex items-center justify-between">
               <div class="flex-1">
                 <p class="font-semibold text-gray-900 text-sm">{{ item.equipment.description if item.equipment else 'N/A' }}</p>
-                <p class="text-xs text-gray-600">{{ item.maintenance_type|title }} - Due: {{ item.scheduled_date.strftime('%Y-%m-%d') }}</p>
+                <p class="text-xs text-gray-600">{{ item.maintenance_type|title }} - Calibration Due: {{ item.scheduled_date.strftime('%Y-%m-%d') }}</p>
               </div>
               <div class="text-right">
                 <span
@@ -204,7 +204,7 @@
           </div>
           <div>
             <h3 class="text-white font-bold text-lg">Upcoming Maintenance</h3>
-            <p class="text-blue-100 text-sm">{{ upcoming_maintenance|length }} scheduled this week</p>
+            <p class="text-blue-100 text-sm">{{ upcoming_maintenance|length }} calibration due this week</p>
           </div>
         </div>
         <a href="/maintenance?status=scheduled" class="text-white hover:text-blue-100 transition">
@@ -492,6 +492,13 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
           </svg>
           Audit Logs
+        </a>
+        <a href="/admin/archive"
+          class="w-full inline-flex items-center justify-center px-4 py-3 bg-gradient-to-r from-slate-600 to-slate-700 text-white font-semibold rounded-lg hover:from-slate-700 hover:to-slate-800 transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105">
+          <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7a2 2 0 012-2h14a2 2 0 012 2v4H3V7zm0 6h18v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4zm5 1v2m4-2v2" />
+          </svg>
+          Archive Center
         </a>
       </div>
 

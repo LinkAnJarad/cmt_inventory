@@ -1,13 +1,14 @@
 import os
 import io
 import uuid
+import json
 import atexit
 import shutil
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, date
 from flask import Flask, render_template, request, redirect, url_for, session, send_file, jsonify
-from models import db, User, Equipment, Consumable, BorrowLog, UsageLog, StudentNote, EquipmentMaintenance, AuditLog, ItemSet, ItemSetItem, FacultyInCharge
+from models import db, User, Equipment, Consumable, BorrowLog, UsageLog, StudentNote, EquipmentMaintenance, AuditLog, ArchiveRecord, ItemSet, ItemSetItem, FacultyInCharge
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import or_, func
 
@@ -38,6 +39,7 @@ db.init_app(app)
 WEEK_SECONDS = 7 * 24 * 60 * 60
 WEEKLY_BACKUP_CHECK_SECONDS = 6 * 60 * 60
 WEEKLY_BACKUP_STATE_FILE = os.path.join(basedir, "instance", "backup", "last_weekly_backup.txt")
+ARCHIVE_RETENTION_YEARS = 5
 
 def _ensure_backup_dir():
     backup_dir = os.path.join(basedir, "instance", "backup")
@@ -145,6 +147,63 @@ def log_system_action(action, details=None):
     )
     db.session.add(log_entry)
     db.session.commit()
+
+def _archive_cutoff_datetime() -> datetime:
+    return datetime.utcnow() - timedelta(days=365 * ARCHIVE_RETENTION_YEARS)
+
+def _serialize_model_row(row):
+    payload = {}
+    for column in row.__table__.columns:
+        value = getattr(row, column.name)
+        if isinstance(value, (datetime, date)):
+            payload[column.name] = value.isoformat()
+        else:
+            payload[column.name] = value
+    return payload
+
+def _eligible_archive_counts(cutoff: datetime):
+    return {
+        'BorrowLog': BorrowLog.query.filter(BorrowLog.borrowed_at.isnot(None), BorrowLog.borrowed_at < cutoff).count(),
+        'UsageLog': UsageLog.query.filter(UsageLog.used_at.isnot(None), UsageLog.used_at < cutoff).count(),
+        'StudentNote': StudentNote.query.filter(StudentNote.created_at.isnot(None), StudentNote.created_at < cutoff).count(),
+        'EquipmentMaintenance': EquipmentMaintenance.query.filter(EquipmentMaintenance.created_at.isnot(None), EquipmentMaintenance.created_at < cutoff).count(),
+        'AuditLog': AuditLog.query.filter(AuditLog.timestamp.isnot(None), AuditLog.timestamp < cutoff).count(),
+    }
+
+def _archive_old_records(cutoff: datetime, archived_by_user_id=None):
+    archived_counts = {
+        'BorrowLog': 0,
+        'UsageLog': 0,
+        'StudentNote': 0,
+        'EquipmentMaintenance': 0,
+        'AuditLog': 0,
+    }
+
+    archive_targets = [
+        ('BorrowLog', BorrowLog, BorrowLog.borrowed_at),
+        ('UsageLog', UsageLog, UsageLog.used_at),
+        ('StudentNote', StudentNote, StudentNote.created_at),
+        ('EquipmentMaintenance', EquipmentMaintenance, EquipmentMaintenance.created_at),
+        ('AuditLog', AuditLog, AuditLog.timestamp),
+    ]
+
+    for name, model, date_col in archive_targets:
+        rows = model.query.filter(date_col.isnot(None), date_col < cutoff).all()
+        archived_counts[name] = len(rows)
+        for row in rows:
+            record_date = getattr(row, date_col.key, None)
+            archived = ArchiveRecord(
+                source_table=name,
+                source_id=getattr(row, 'id', None),
+                record_date=record_date,
+                payload_json=json.dumps(_serialize_model_row(row), ensure_ascii=True),
+                archived_by=archived_by_user_id,
+            )
+            db.session.add(archived)
+            db.session.delete(row)
+
+    db.session.commit()
+    return archived_counts
 
 def _expiration_sort_key(exp):
     """
@@ -3651,6 +3710,39 @@ def export_logs_pdf():
     filename = f"audit_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
     return send_file(buffer, mimetype="application/pdf", as_attachment=True, download_name=filename)
 
+@app.route('/admin/archive')
+def archive_center():
+    if session.get('role') != 'admin':
+        return redirect(url_for('dashboard'))
+
+    cutoff = _archive_cutoff_datetime()
+    eligible_counts = _eligible_archive_counts(cutoff)
+    total_eligible = sum(eligible_counts.values())
+    recent_archives = ArchiveRecord.query.order_by(ArchiveRecord.archived_at.desc()).limit(100).all()
+
+    archived_total = request.args.get('archived_total', '').strip()
+    return render_template(
+        'archive.html',
+        cutoff=cutoff,
+        eligible_counts=eligible_counts,
+        total_eligible=total_eligible,
+        recent_archives=recent_archives,
+        archived_total=archived_total,
+    )
+
+@app.route('/admin/archive/run', methods=['POST'])
+def run_archive_job():
+    if session.get('role') != 'admin':
+        return redirect(url_for('dashboard'))
+
+    cutoff = _archive_cutoff_datetime()
+    archived_counts = _archive_old_records(cutoff, session.get('user_id'))
+    archived_total = sum(archived_counts.values())
+    details = ', '.join([f"{k}: {v}" for k, v in archived_counts.items()])
+    log_action('Archive Old Records', f"Archived records older than {ARCHIVE_RETENTION_YEARS} years. Total: {archived_total}. {details}")
+
+    return redirect(url_for('archive_center', archived_total=archived_total))
+
 # ========== EQUIPMENT MAINTENANCE ROUTES ==========
 @app.route('/maintenance')
 def maintenance():
@@ -3660,7 +3752,7 @@ def maintenance():
     from datetime import date
     
     q = request.args.get('q', '').strip()
-    sort = request.args.get('sort', 'scheduled_date')
+    sort = request.args.get('sort', 'calibration_due')
     direction = request.args.get('dir', 'desc').lower()
     direction = 'desc' if direction == 'desc' else 'asc'
     status_filter = request.args.get('status', 'all')  # all, scheduled, completed, overdue
@@ -3668,6 +3760,12 @@ def maintenance():
     date_from = request.args.get('date_from', '').strip()
     date_to = request.args.get('date_to', '').strip()
     
+    sort_aliases = {
+        'calibration_due': 'scheduled_date',
+        'date_calibrated': 'completed_date',
+    }
+    sort = sort_aliases.get(sort, sort)
+
     sortable_fields = {
         'equipment', 'maintenance_type', 'scheduled_date', 'completed_date', 
         'performed_by', 'cost', 'status', 'created_at'
@@ -3696,7 +3794,7 @@ def maintenance():
     if type_filter != 'all':
         query = query.filter(EquipmentMaintenance.maintenance_type == type_filter)
     
-    # Date range filter (scheduled_date)
+    # Date range filter (calibration due date)
     if date_from:
         query = query.filter(EquipmentMaintenance.scheduled_date >= date_from)
     if date_to:
@@ -3737,12 +3835,12 @@ def add_maintenance():
     if request.method == 'POST':
         from datetime import datetime
         
-        scheduled_date = request.form.get('scheduled_date')
+        calibration_due = request.form.get('calibration_due') or request.form.get('scheduled_date')
         
         record = EquipmentMaintenance(
             equipment_id=request.form['equipment_id'],
             maintenance_type=request.form['maintenance_type'],
-            scheduled_date=datetime.strptime(scheduled_date, '%Y-%m-%d').date(),
+            scheduled_date=datetime.strptime(calibration_due, '%Y-%m-%d').date(),
             performed_by=request.form.get('performed_by'),
             notes=request.form.get('notes'),
             cost=float(request.form.get('cost', 0.0) or 0.0),
@@ -3767,15 +3865,15 @@ def edit_maintenance(id):
     if request.method == 'POST':
         from datetime import datetime
         
-        scheduled_date = request.form.get('scheduled_date')
-        completed_date = request.form.get('completed_date')
+        calibration_due = request.form.get('calibration_due') or request.form.get('scheduled_date')
+        date_calibrated = request.form.get('date_calibrated') or request.form.get('completed_date')
         
         record.equipment_id = request.form['equipment_id']
         record.maintenance_type = request.form['maintenance_type']
-        record.scheduled_date = datetime.strptime(scheduled_date, '%Y-%m-%d').date()
+        record.scheduled_date = datetime.strptime(calibration_due, '%Y-%m-%d').date()
         
-        if completed_date:
-            record.completed_date = datetime.strptime(completed_date, '%Y-%m-%d').date()
+        if date_calibrated:
+            record.completed_date = datetime.strptime(date_calibrated, '%Y-%m-%d').date()
             record.status = 'completed'
         else:
             record.completed_date = None
@@ -3848,13 +3946,19 @@ def export_maintenance_pdf():
                 "`pip install reportlab`"), 500
 
     q = request.args.get('q', '').strip()
-    sort = request.args.get('sort', 'scheduled_date')
+    sort = request.args.get('sort', 'calibration_due')
     direction = request.args.get('dir', 'desc').lower()
     direction = 'desc' if direction == 'desc' else 'asc'
     status_filter = request.args.get('status', 'all')
     type_filter = request.args.get('type', 'all')
     date_from = request.args.get('date_from', '').strip()
     date_to = request.args.get('date_to', '').strip()
+
+    sort_aliases = {
+        'calibration_due': 'scheduled_date',
+        'date_calibrated': 'completed_date',
+    }
+    sort = sort_aliases.get(sort, sort)
 
     sortable_fields = {
         'equipment', 'maintenance_type', 'scheduled_date', 'completed_date', 
@@ -3944,8 +4048,8 @@ def export_maintenance_pdf():
     data = [
         [Paragraph("Equipment", header_style), 
          Paragraph("Type", header_style),
-         Paragraph("Scheduled", header_style),
-         Paragraph("Completed", header_style),
+         Paragraph("Calibration Due", header_style),
+         Paragraph("Date Calibrated", header_style),
          Paragraph("Performed By", header_style),
          Paragraph("Cost", header_style),
          Paragraph("Status", header_style)]

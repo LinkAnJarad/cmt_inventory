@@ -129,6 +129,17 @@ class AuditLog(db.Model):
     
     user = db.relationship('User', backref='audit_logs')
 
+class ArchiveRecord(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    source_table = db.Column(db.String(64), nullable=False)
+    source_id = db.Column(db.Integer, nullable=True)
+    record_date = db.Column(db.DateTime, nullable=True)
+    payload_json = db.Column(db.Text, nullable=False)
+    archived_at = db.Column(db.DateTime, default=db.func.current_timestamp(), nullable=False)
+    archived_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+
+    archiver = db.relationship('User', backref='archived_records')
+
 class ItemSet(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)

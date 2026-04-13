@@ -3,7 +3,7 @@
 
 <div class="max-w-2xl mx-auto">
   <div class="bg-white rounded-lg shadow-md p-8">
-    <h1 class="text-2xl font-bold text-gray-900 mb-6">Edit Maintenance Record</h1>
+    <h1 class="text-2xl font-bold text-gray-900 mb-6">Edit Calibration Record</h1>
     
     <form method="POST" action="{{ url_for('edit_maintenance', id=record.id) }}" class="space-y-4">
       <!-- Equipment Select -->
@@ -31,21 +31,21 @@
         </select>
       </div>
       
-      <!-- Scheduled Date -->
+      <!-- Calibration Due -->
       <div>
-        <label for="scheduled_date" class="block text-sm font-medium text-gray-700 mb-1">Scheduled Date *</label>
-        <input type="date" name="scheduled_date" id="scheduled_date" required 
+        <label for="calibration_due" class="block text-sm font-medium text-gray-700 mb-1">Calibration Due *</label>
+        <input type="date" name="calibration_due" id="calibration_due" required 
                value="{{ record.scheduled_date.strftime('%Y-%m-%d') }}"
                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
       </div>
       
-      <!-- Completed Date -->
+      <!-- Date Calibrated -->
       <div>
-        <label for="completed_date" class="block text-sm font-medium text-gray-700 mb-1">Completed Date</label>
-        <input type="date" name="completed_date" id="completed_date" 
+        <label for="date_calibrated" class="block text-sm font-medium text-gray-700 mb-1">Date Calibrated</label>
+        <input type="date" name="date_calibrated" id="date_calibrated" 
                value="{{ record.completed_date.strftime('%Y-%m-%d') if record.completed_date else '' }}"
                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
-        <p class="text-xs text-gray-500 mt-1">Leave empty if not yet completed</p>
+        <p class="text-xs text-gray-500 mt-1">Leave empty if not yet calibrated</p>
       </div>
       
       <!-- Performed By -->
