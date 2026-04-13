@@ -1,10 +1,13 @@
 import os
 import io
 import uuid
+import atexit
 import shutil
+import threading
+import time
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, session, send_file, jsonify
-from models import db, User, Equipment, Consumable, BorrowLog, UsageLog, StudentNote, EquipmentMaintenance, AuditLog
+from models import db, User, Equipment, Consumable, BorrowLog, UsageLog, StudentNote, EquipmentMaintenance, AuditLog, ItemSet, ItemSetItem, FacultyInCharge
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import or_, func
 
@@ -32,6 +35,65 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
 
+WEEK_SECONDS = 7 * 24 * 60 * 60
+WEEKLY_BACKUP_CHECK_SECONDS = 6 * 60 * 60
+WEEKLY_BACKUP_STATE_FILE = os.path.join(basedir, "instance", "backup", "last_weekly_backup.txt")
+
+def _ensure_backup_dir():
+    backup_dir = os.path.join(basedir, "instance", "backup")
+    os.makedirs(backup_dir, exist_ok=True)
+    return backup_dir
+
+def _read_last_weekly_backup_epoch():
+    try:
+        with open(WEEKLY_BACKUP_STATE_FILE, "r", encoding="utf-8") as f:
+            return float(f.read().strip())
+    except Exception:
+        return 0.0
+
+def _write_last_weekly_backup_epoch(epoch_time: float):
+    _ensure_backup_dir()
+    with open(WEEKLY_BACKUP_STATE_FILE, "w", encoding="utf-8") as f:
+        f.write(str(epoch_time))
+
+def _create_backup_file():
+    db_path = os.path.join(basedir, "instance", "database.db")
+    if not os.path.exists(db_path):
+        return None
+
+    backup_dir = _ensure_backup_dir()
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    backup_filename = f"backup_cmt_inventory_{timestamp}.db"
+    backup_path = os.path.join(backup_dir, backup_filename)
+    shutil.copy2(db_path, backup_path)
+    return backup_path
+
+def _weekly_backup_worker(stop_event: threading.Event):
+    while not stop_event.is_set():
+        now = time.time()
+        last_backup = _read_last_weekly_backup_epoch()
+        if now - last_backup >= WEEK_SECONDS:
+            try:
+                backup_path = _create_backup_file()
+                if backup_path:
+                    _write_last_weekly_backup_epoch(now)
+                    with app.app_context():
+                        log_system_action("Weekly Backup", f"Automatic weekly backup created: {os.path.basename(backup_path)}")
+                    print(f"Weekly backup created: {backup_path}")
+                else:
+                    print("Weekly backup skipped: database not found")
+            except Exception as e:
+                print(f"Weekly backup failed: {e}")
+
+        stop_event.wait(WEEKLY_BACKUP_CHECK_SECONDS)
+
+_weekly_backup_stop_event = threading.Event()
+
+def start_weekly_backup_thread():
+    thread = threading.Thread(target=_weekly_backup_worker, args=(_weekly_backup_stop_event,), daemon=True)
+    thread.start()
+    return thread
+
 def _to_int(value, default=0):
     try:
         if value is None:
@@ -49,6 +111,12 @@ def _clamp_nonneg(x):
     x = _to_int(x, 0)
     return 0 if x < 0 else x
 
+def _normalize_type(value: str) -> str:
+    return (value or '').strip().lower()
+
+def _faculty_required(user_type: str, faculty_id_value) -> bool:
+    return _normalize_type(user_type) == 'student' and not _to_int(faculty_id_value, 0)
+
 def log_action(action, details=None):
     """
     Helper to log user actions to the database.
@@ -61,6 +129,19 @@ def log_action(action, details=None):
         action=action,
         details=details,
         ip_address=ip_address
+    )
+    db.session.add(log_entry)
+    db.session.commit()
+
+def log_system_action(action, details=None):
+    """
+    Helper to log system actions (no user/session context).
+    """
+    log_entry = AuditLog(
+        user_id=None,
+        action=action,
+        details=details,
+        ip_address=None
     )
     db.session.add(log_entry)
     db.session.commit()
@@ -1150,21 +1231,33 @@ def borrow_equipment():
     if request.method == 'POST':
         # Support bulk borrowing
         quantity = int(request.form.get('quantity_borrowed', 1))
+        borrower_type = request.form['borrower_type']
+        faculty_in_charge_id = request.form.get('faculty_in_charge_id')
+
+        if _faculty_required(borrower_type, faculty_in_charge_id):
+            equipment_list = Equipment.query.all()
+            faculty_list = FacultyInCharge.query.order_by(FacultyInCharge.name.asc()).all()
+            return render_template('borrow_equipment.html', equipment=equipment_list, faculty_list=faculty_list,
+                                   error="Faculty in Charge is required for student borrowers.")
         
         log = BorrowLog(
-            borrower_name=request.form['borrower_name'],
-            borrower_type=request.form['borrower_type'],
-            section_course=request.form['section_course'],
+            borrower_first_name=request.form['borrower_first_name'],
+            borrower_last_name=request.form['borrower_last_name'],
+            borrower_type=borrower_type,
+            course_code=request.form['course_code'],
+            section=request.form['section'],
             purpose=request.form['purpose'],
+            faculty_in_charge_id=_to_int(faculty_in_charge_id, None) if faculty_in_charge_id else None,
             equipment_id=request.form['equipment_id'],
             quantity_borrowed=quantity
         )
         db.session.add(log)
         db.session.commit()
-        log_action("Borrow Equipment", f"{log.borrower_name} borrowed {log.quantity_borrowed}x {log.equipment.description}")
+        log_action("Borrow Equipment", f"{log.borrower_first_name} {log.borrower_last_name} borrowed {log.quantity_borrowed}x {log.equipment.description}")
         return redirect(url_for('equipment'))
     equipment_list = Equipment.query.all()
-    return render_template('borrow_equipment.html', equipment=equipment_list)
+    faculty_list = FacultyInCharge.query.order_by(FacultyInCharge.name.asc()).all()
+    return render_template('borrow_equipment.html', equipment=equipment_list, faculty_list=faculty_list)
 
 @app.route('/use_consumable', methods=['GET', 'POST'])
 def use_consumable():
@@ -1173,6 +1266,14 @@ def use_consumable():
     if request.method == 'POST':
         quantity_used = _clamp_nonneg(request.form['quantity'])
         consumable_id = _to_int(request.form['consumable_id'], 0)
+        user_type = request.form['user_type']
+        faculty_in_charge_id = request.form.get('faculty_in_charge_id')
+
+        if _faculty_required(user_type, faculty_in_charge_id):
+            consumables_list = Consumable.query.all()
+            faculty_list = FacultyInCharge.query.order_by(FacultyInCharge.name.asc()).all()
+            return render_template('use_consumable.html', consumables=consumables_list, faculty_list=faculty_list,
+                                   error="Faculty in Charge is required for student users.")
 
         if quantity_used <= 0:
             return redirect(url_for('consumables'))
@@ -1181,10 +1282,13 @@ def use_consumable():
 
         # Log usage
         log = UsageLog(
-            user_name=request.form['user_name'],
-            user_type=request.form['user_type'],
-            section_course=request.form['section_course'],
+            user_first_name=request.form['user_first_name'],
+            user_last_name=request.form['user_last_name'],
+            user_type=user_type,
+            course_code=request.form['course_code'],
+            section=request.form['section'],
             purpose=request.form['purpose'],
+            faculty_in_charge_id=_to_int(faculty_in_charge_id, None) if faculty_in_charge_id else None,
             consumable_id=consumable_id,
             quantity_used=quantity_used
         )
@@ -1200,11 +1304,12 @@ def use_consumable():
         recalc_single_row(c)
 
         db.session.commit()
-        log_action("Use Consumable", f"{log.user_name} used {log.quantity_used}x {log.consumable.description}")
+        log_action("Use Consumable", f"{log.user_first_name} {log.user_last_name} used {log.quantity_used}x {log.consumable.description}")
         return redirect(url_for('consumables'))
 
     consumables_list = Consumable.query.all()
-    return render_template('use_consumable.html', consumables=consumables_list)
+    faculty_list = FacultyInCharge.query.order_by(FacultyInCharge.name.asc()).all()
+    return render_template('use_consumable.html', consumables=consumables_list, faculty_list=faculty_list)
 
 
 # Row-level Borrow Equipment
@@ -1216,20 +1321,32 @@ def borrow_equipment_row(id):
     equipment = Equipment.query.get_or_404(id)
     
     if request.method == 'POST':
+        borrower_type = request.form['borrower_type']
+        faculty_in_charge_id = request.form.get('faculty_in_charge_id')
+
+        if _faculty_required(borrower_type, faculty_in_charge_id):
+            faculty_list = FacultyInCharge.query.order_by(FacultyInCharge.name.asc()).all()
+            return render_template('borrow_equipment_row.html', equipment=equipment, faculty_list=faculty_list,
+                                   error="Faculty in Charge is required for student borrowers.")
+
         log = BorrowLog(
-            borrower_name=request.form['borrower_name'],
-            borrower_type=request.form['borrower_type'],
-            section_course=request.form['section_course'],
+            borrower_first_name=request.form['borrower_first_name'],
+            borrower_last_name=request.form['borrower_last_name'],
+            borrower_type=borrower_type,
+            course_code=request.form['course_code'],
+            section=request.form['section'],
             purpose=request.form['purpose'],
+            faculty_in_charge_id=_to_int(faculty_in_charge_id, None) if faculty_in_charge_id else None,
             equipment_id=equipment.id,
             quantity_borrowed=int(request.form.get('quantity_borrowed', 1))
         )
         db.session.add(log)
         db.session.commit()
-        log_action("Borrow Equipment", f"{log.borrower_name} borrowed {log.quantity_borrowed}x {equipment.description}")
+        log_action("Borrow Equipment", f"{log.borrower_first_name} {log.borrower_last_name} borrowed {log.quantity_borrowed}x {equipment.description}")
         return redirect(url_for('equipment'))
     
-    return render_template('borrow_equipment_row.html', equipment=equipment)
+    faculty_list = FacultyInCharge.query.order_by(FacultyInCharge.name.asc()).all()
+    return render_template('borrow_equipment_row.html', equipment=equipment, faculty_list=faculty_list)
 
 def consume_by_id(consumable_id: int, quantity: int):
     """
@@ -1263,14 +1380,24 @@ def use_consumable_row(id):
     
     if request.method == 'POST':
         quantity_used = _clamp_nonneg(request.form['quantity'])
+        user_type = request.form['user_type']
+        faculty_in_charge_id = request.form.get('faculty_in_charge_id')
+
+        if _faculty_required(user_type, faculty_in_charge_id):
+            faculty_list = FacultyInCharge.query.order_by(FacultyInCharge.name.asc()).all()
+            return render_template('use_consumable_row.html', consumable=c, faculty_list=faculty_list,
+                                   error="Faculty in Charge is required for student users.")
 
         if quantity_used > 0:
             # Log usage
             log = UsageLog(
-                user_name=request.form['user_name'],
-                user_type=request.form['user_type'],
-                section_course=request.form['section_course'],
+                user_first_name=request.form['user_first_name'],
+                user_last_name=request.form['user_last_name'],
+                user_type=user_type,
+                course_code=request.form['course_code'],
+                section=request.form['section'],
                 purpose=request.form['purpose'],
+                faculty_in_charge_id=_to_int(faculty_in_charge_id, None) if faculty_in_charge_id else None,
                 consumable_id=c.id,
                 quantity_used=quantity_used
             )
@@ -1288,7 +1415,8 @@ def use_consumable_row(id):
             db.session.commit()
         return redirect(url_for('consumables'))
     
-    return render_template('use_consumable_row.html', consumable=c)
+    faculty_list = FacultyInCharge.query.order_by(FacultyInCharge.name.asc()).all()
+    return render_template('use_consumable_row.html', consumable=c, faculty_list=faculty_list)
 
 @app.route('/consumables/return/<int:usage_id>', methods=['GET', 'POST'])
 def return_consumable(usage_id):
@@ -1322,10 +1450,10 @@ def return_consumable(usage_id):
 
             if note_type and note_type != 'none' and note_description:
                 note = StudentNote(
-                    person_name=log.user_name,
+                    person_name=f"{log.user_first_name} {log.user_last_name}",
                     person_number=log.user_type,
                     person_type=log.user_type,
-                    section_course=log.section_course,
+                    section_course=f"{log.course_code} {log.section}",
                     note_type=note_type,
                     description=note_description,
                     consumable_id=log.consumable_id,
@@ -1338,7 +1466,7 @@ def return_consumable(usage_id):
             recalc_single_row(log.consumable)
         
         db.session.commit()
-        log_action("Return Consumable", f"{log.user_name} returned items for {log.consumable.description}")
+        log_action("Return Consumable", f"{log.user_first_name} {log.user_last_name} returned items for {log.consumable.description}")
         return redirect(url_for('history'))
     
     return render_template('return_consumable.html', log=log)
@@ -1363,10 +1491,10 @@ def return_equipment(borrow_id):
 
         if note_type and note_type != 'none' and note_description:
             note = StudentNote(
-                person_name=log.borrower_name,
+                person_name=f"{log.borrower_first_name} {log.borrower_last_name}",
                 person_number='',  # No person number in new structure
                 person_type=log.borrower_type,
-                section_course=log.section_course,
+                section_course=f"{log.course_code} {log.section}",
                 note_type=note_type,  # 'damaged', 'lost', 'other'
                 description=note_description,
                 equipment_id=log.equipment_id,
@@ -1376,7 +1504,7 @@ def return_equipment(borrow_id):
             db.session.add(note)
 
         db.session.commit()
-        log_action("Return Equipment", f"{log.borrower_name} returned {log.quantity_borrowed}x {log.equipment.description}")
+        log_action("Return Equipment", f"{log.borrower_first_name} {log.borrower_last_name} returned {log.quantity_borrowed}x {log.equipment.description}")
         return redirect(url_for('history'))
 
     return render_template('return_equipment.html', log=log)
@@ -1388,19 +1516,189 @@ def bulk_operations():
     
     equipment_list = Equipment.query.all()
     consumables_list = Consumable.query.all()
+    item_sets = ItemSet.query.all()
+    faculty_list = FacultyInCharge.query.order_by(FacultyInCharge.name.asc()).all()
+
+    item_sets_payload = []
+    for s in item_sets:
+        item_sets_payload.append({
+            'id': s.id,
+            'name': s.name,
+            'equipment_items': [
+                {'item_id': i.equipment_id, 'quantity': i.quantity}
+                for i in s.items if i.equipment_id
+            ],
+            'consumable_items': [
+                {'item_id': i.consumable_id, 'quantity': i.quantity}
+                for i in s.items if i.consumable_id
+            ]
+        })
+
     return render_template('bulk_operations.html', 
                          equipment=equipment_list, 
-                         consumables=consumables_list)
+                         consumables=consumables_list,
+                         item_sets=item_sets,
+                         item_sets_payload=item_sets_payload,
+                         faculty_list=faculty_list)
+
+@app.route('/item_sets', methods=['GET', 'POST'])
+def item_sets():
+    if session.get('role') not in ['tech', 'admin']:
+        return redirect(url_for('dashboard'))
+
+    if request.method == 'POST':
+        set_name = (request.form.get('set_name') or '').strip()
+
+        if set_name:
+            new_set = ItemSet(
+                name=set_name,
+                created_by=session.get('user_id')
+            )
+            db.session.add(new_set)
+            db.session.flush()
+
+            equipment_ids = request.form.getlist('equipment_ids[]')
+            quantities = request.form.getlist('equipment_quantities[]')
+            for i, equipment_id in enumerate(equipment_ids):
+                if equipment_id:
+                    quantity = _clamp_nonneg(quantities[i] if i < len(quantities) else 1)
+                    if quantity > 0:
+                        db.session.add(ItemSetItem(
+                            set_id=new_set.id,
+                            equipment_id=equipment_id,
+                            quantity=quantity
+                        ))
+
+            consumable_ids = request.form.getlist('consumable_ids[]')
+            quantities = request.form.getlist('consumable_quantities[]')
+            for i, consumable_id in enumerate(consumable_ids):
+                if consumable_id:
+                    quantity = _clamp_nonneg(quantities[i] if i < len(quantities) else 1)
+                    if quantity > 0:
+                        db.session.add(ItemSetItem(
+                            set_id=new_set.id,
+                            consumable_id=consumable_id,
+                            quantity=quantity
+                        ))
+
+            db.session.commit()
+            log_action("Create Item Set", f"Created mixed set: {set_name}")
+
+        return redirect(url_for('item_sets'))
+
+    equipment_list = Equipment.query.all()
+    consumables_list = Consumable.query.all()
+    item_sets = ItemSet.query.all()
+
+    return render_template(
+        'item_sets.html',
+        equipment=equipment_list,
+        consumables=consumables_list,
+        item_sets=item_sets
+    )
+
+@app.route('/item_sets/<int:set_id>/delete', methods=['POST'])
+def delete_item_set(set_id):
+    if session.get('role') not in ['tech', 'admin']:
+        return redirect(url_for('dashboard'))
+
+    item_set = ItemSet.query.get_or_404(set_id)
+    set_name = item_set.name
+    db.session.delete(item_set)
+    db.session.commit()
+    log_action("Delete Item Set", f"Deleted set: {set_name}")
+    return redirect(url_for('item_sets'))
+
+@app.route('/faculty_in_charge', methods=['GET', 'POST'])
+def faculty_in_charge():
+    if session.get('role') not in ['tech', 'admin']:
+        return redirect(url_for('dashboard'))
+
+    if request.method == 'POST':
+        name = (request.form.get('name') or '').strip()
+        if name:
+            existing = FacultyInCharge.query.filter(func.lower(FacultyInCharge.name) == name.lower()).first()
+            if not existing:
+                entry = FacultyInCharge(name=name)
+                db.session.add(entry)
+                db.session.commit()
+                log_action("Add Faculty In Charge", f"Created faculty in charge: {name}")
+            else:
+                return redirect(url_for('faculty_in_charge'))
+        return redirect(url_for('faculty_in_charge'))
+
+    faculty_list = FacultyInCharge.query.order_by(FacultyInCharge.name.asc()).all()
+    return render_template('faculty_in_charge.html', faculty_list=faculty_list)
+
+@app.route('/faculty_in_charge/<int:faculty_id>/edit', methods=['GET', 'POST'])
+def edit_faculty_in_charge(faculty_id):
+    if session.get('role') not in ['tech', 'admin']:
+        return redirect(url_for('dashboard'))
+
+    entry = FacultyInCharge.query.get_or_404(faculty_id)
+
+    if request.method == 'POST':
+        name = (request.form.get('name') or '').strip()
+        if name:
+            entry.name = name
+            db.session.commit()
+            log_action("Edit Faculty In Charge", f"Updated faculty in charge: {name}")
+        return redirect(url_for('faculty_in_charge'))
+
+    faculty_list = FacultyInCharge.query.order_by(FacultyInCharge.name.asc()).all()
+    return render_template('faculty_in_charge.html', faculty_list=faculty_list, edit_entry=entry)
+
+@app.route('/faculty_in_charge/<int:faculty_id>/delete', methods=['POST'])
+def delete_faculty_in_charge(faculty_id):
+    if session.get('role') not in ['tech', 'admin']:
+        return redirect(url_for('dashboard'))
+
+    entry = FacultyInCharge.query.get_or_404(faculty_id)
+    name = entry.name
+    db.session.delete(entry)
+    db.session.commit()
+    log_action("Delete Faculty In Charge", f"Deleted faculty in charge: {name}")
+    return redirect(url_for('faculty_in_charge'))
 
 @app.route('/bulk_borrow_equipment', methods=['POST'])
 def bulk_borrow_equipment():
     if session.get('role') not in ['tech', 'admin']:
         return redirect(url_for('dashboard'))
     
-    borrower_name = request.form['borrower_name']
+    borrower_first_name = request.form['borrower_first_name']
+    borrower_last_name = request.form['borrower_last_name']
     borrower_type = request.form['borrower_type']
-    section_course = request.form['section_course']
+    course_code = request.form['course_code']
+    section = request.form['section']
     purpose = request.form['purpose']
+    faculty_in_charge_id = request.form.get('faculty_in_charge_id')
+
+    if _faculty_required(borrower_type, faculty_in_charge_id):
+        equipment_list = Equipment.query.all()
+        consumables_list = Consumable.query.all()
+        item_sets = ItemSet.query.all()
+        faculty_list = FacultyInCharge.query.order_by(FacultyInCharge.name.asc()).all()
+        item_sets_payload = []
+        for s in item_sets:
+            item_sets_payload.append({
+                'id': s.id,
+                'name': s.name,
+                'equipment_items': [
+                    {'item_id': i.equipment_id, 'quantity': i.quantity}
+                    for i in s.items if i.equipment_id
+                ],
+                'consumable_items': [
+                    {'item_id': i.consumable_id, 'quantity': i.quantity}
+                    for i in s.items if i.consumable_id
+                ]
+            })
+        return render_template('bulk_operations.html',
+                              equipment=equipment_list,
+                              consumables=consumables_list,
+                              item_sets=item_sets,
+                              item_sets_payload=item_sets_payload,
+                              faculty_list=faculty_list,
+                              error="Faculty in Charge is required for student borrowers.")
     
     equipment_ids = request.form.getlist('equipment_ids[]')
     quantities = request.form.getlist('quantities[]')
@@ -1411,10 +1709,13 @@ def bulk_borrow_equipment():
             quantity = _clamp_nonneg(quantities[i] if i < len(quantities) else 1)
             if quantity > 0:
                 log = BorrowLog(
-                    borrower_name=borrower_name,
+                    borrower_first_name=borrower_first_name,
+                    borrower_last_name=borrower_last_name,
                     borrower_type=borrower_type,
-                    section_course=section_course,
+                    course_code=course_code,
+                    section=section,
                     purpose=purpose,
+                    faculty_in_charge_id=_to_int(faculty_in_charge_id, None) if faculty_in_charge_id else None,
                     equipment_id=equipment_id,
                     quantity_borrowed=quantity
                 )
@@ -1428,10 +1729,40 @@ def bulk_use_consumables():
     if session.get('role') not in ['tech', 'admin']:
         return redirect(url_for('dashboard'))
     
-    user_name = request.form['user_name']
+    user_first_name = request.form['user_first_name']
+    user_last_name = request.form['user_last_name']
     user_type = request.form['user_type']
-    section_course = request.form['section_course']
+    course_code = request.form['course_code']
+    section = request.form['section']
     purpose = request.form['purpose']
+    faculty_in_charge_id = request.form.get('faculty_in_charge_id')
+
+    if _faculty_required(user_type, faculty_in_charge_id):
+        equipment_list = Equipment.query.all()
+        consumables_list = Consumable.query.all()
+        item_sets = ItemSet.query.all()
+        faculty_list = FacultyInCharge.query.order_by(FacultyInCharge.name.asc()).all()
+        item_sets_payload = []
+        for s in item_sets:
+            item_sets_payload.append({
+                'id': s.id,
+                'name': s.name,
+                'equipment_items': [
+                    {'item_id': i.equipment_id, 'quantity': i.quantity}
+                    for i in s.items if i.equipment_id
+                ],
+                'consumable_items': [
+                    {'item_id': i.consumable_id, 'quantity': i.quantity}
+                    for i in s.items if i.consumable_id
+                ]
+            })
+        return render_template('bulk_operations.html',
+                              equipment=equipment_list,
+                              consumables=consumables_list,
+                              item_sets=item_sets,
+                              item_sets_payload=item_sets_payload,
+                              faculty_list=faculty_list,
+                              error="Faculty in Charge is required for student users.")
     
     consumable_ids = request.form.getlist('consumable_ids[]')
     quantities = request.form.getlist('quantities[]')
@@ -1445,10 +1776,13 @@ def bulk_use_consumables():
                 if c:
                     # Log usage
                     log = UsageLog(
-                        user_name=user_name,
+                        user_first_name=user_first_name,
+                        user_last_name=user_last_name,
                         user_type=user_type,
-                        section_course=section_course,
+                        course_code=course_code,
+                        section=section,
                         purpose=purpose,
+                        faculty_in_charge_id=_to_int(faculty_in_charge_id, None) if faculty_in_charge_id else None,
                         consumable_id=consumable_id,
                         quantity_used=quantity_used
                     )
@@ -1489,11 +1823,11 @@ def history():
     u_dir = 'desc' if u_dir == 'desc' else 'asc'
 
     # BORROWS - Updated field names
-    borrows_sortable = {'borrower_name', 'borrower_type', 'section_course', 'purpose', 'equipment', 'quantity_borrowed', 'borrowed_at', 'returned_at'}
+    borrows_sortable = {'borrower_first_name', 'borrower_last_name', 'borrower_type', 'course_code', 'section', 'purpose', 'faculty_in_charge', 'equipment', 'quantity_borrowed', 'borrowed_at', 'returned_at'}
     if b_sort not in borrows_sortable:
         b_sort = 'borrowed_at'
 
-    b_query = BorrowLog.query.outerjoin(Equipment)
+    b_query = BorrowLog.query.outerjoin(Equipment).outerjoin(FacultyInCharge)
 
     if start_date:
         b_query = b_query.filter(BorrowLog.borrowed_at >= datetime.strptime(start_date, '%Y-%m-%d'))
@@ -1505,15 +1839,20 @@ def history():
     if b_q:
         like = f"%{b_q}%"
         b_query = b_query.filter(or_(
-            BorrowLog.borrower_name.ilike(like),
+            BorrowLog.borrower_first_name.ilike(like),
+            BorrowLog.borrower_last_name.ilike(like),
             BorrowLog.borrower_type.ilike(like),
-            BorrowLog.section_course.ilike(like),
+            BorrowLog.course_code.ilike(like),
+            BorrowLog.section.ilike(like),
             BorrowLog.purpose.ilike(like),
+            FacultyInCharge.name.ilike(like),
             Equipment.description.ilike(like),
         ))
 
     if b_sort == 'equipment':
         b_sort_col = Equipment.description
+    elif b_sort == 'faculty_in_charge':
+        b_sort_col = FacultyInCharge.name
     else:
         b_sort_col = getattr(BorrowLog, b_sort)
 
@@ -1521,11 +1860,11 @@ def history():
     borrows = b_query.all()
 
     # USAGES - Updated field names
-    usages_sortable = {'user_name', 'user_type', 'section_course', 'purpose', 'consumable', 'quantity_used', 'used_at'}
+    usages_sortable = {'user_first_name', 'user_last_name', 'user_type', 'course_code', 'section', 'purpose', 'faculty_in_charge', 'consumable', 'quantity_used', 'used_at'}
     if u_sort not in usages_sortable:
         u_sort = 'used_at'
 
-    u_query = UsageLog.query.outerjoin(Consumable)
+    u_query = UsageLog.query.outerjoin(Consumable).outerjoin(FacultyInCharge)
 
     if start_date:
         u_query = u_query.filter(UsageLog.used_at >= datetime.strptime(start_date, '%Y-%m-%d'))
@@ -1536,15 +1875,20 @@ def history():
     if u_q:
         like = f"%{u_q}%"
         u_query = u_query.filter(or_(
-            UsageLog.user_name.ilike(like),
+            UsageLog.user_first_name.ilike(like),
+            UsageLog.user_last_name.ilike(like),
             UsageLog.user_type.ilike(like),
-            UsageLog.section_course.ilike(like),
+            UsageLog.course_code.ilike(like),
+            UsageLog.section.ilike(like),
             UsageLog.purpose.ilike(like),
+            FacultyInCharge.name.ilike(like),
             Consumable.description.ilike(like),
         ))
 
     if u_sort == 'consumable':
         u_sort_col = Consumable.description
+    elif u_sort == 'faculty_in_charge':
+        u_sort_col = FacultyInCharge.name
     else:
         u_sort_col = getattr(UsageLog, u_sort)
 
@@ -1639,9 +1983,11 @@ def export_history_pdf():
         if b_q:
             like = f"%{b_q}%"
             b_query = b_query.filter(or_(
-                BorrowLog.borrower_name.ilike(like),
+                BorrowLog.borrower_first_name.ilike(like),
+                BorrowLog.borrower_last_name.ilike(like),
                 BorrowLog.borrower_type.ilike(like),
-                BorrowLog.section_course.ilike(like),
+                BorrowLog.course_code.ilike(like),
+                BorrowLog.section.ilike(like),
                 BorrowLog.purpose.ilike(like),
                 Equipment.description.ilike(like),
             ))
@@ -1666,9 +2012,11 @@ def export_history_pdf():
         if u_q:
             like = f"%{u_q}%"
             u_query = u_query.filter(or_(
-                UsageLog.user_name.ilike(like),
+                UsageLog.user_first_name.ilike(like),
+                UsageLog.user_last_name.ilike(like),
                 UsageLog.user_type.ilike(like),
-                UsageLog.section_course.ilike(like),
+                UsageLog.course_code.ilike(like),
+                UsageLog.section.ilike(like),
                 UsageLog.purpose.ilike(like),
                 Consumable.description.ilike(like),
             ))
@@ -1784,7 +2132,7 @@ def export_history_pdf():
         elements.append(Spacer(1, 6))
         
         borrow_headers = [
-            "Borrower", "Type", "Section + Course", "Purpose", 
+            "First Name", "Last Name", "Type", "Course Code", "Section", "Faculty In Charge", "Purpose",
             "Equipment", "Quantity", "Borrowed At", "Returned At"
         ]
 
@@ -1793,9 +2141,12 @@ def export_history_pdf():
         
         for log in borrows:
             borrow_data.append([
-                create_paragraph(sval(log.borrower_name)),
+                create_paragraph(sval(log.borrower_first_name)),
+                create_paragraph(sval(log.borrower_last_name)),
                 create_paragraph(sval(log.borrower_type.title() if log.borrower_type else "")),
-                create_paragraph(sval(log.section_course)),
+                create_paragraph(sval(log.course_code)),
+                create_paragraph(sval(log.section)),
+                create_paragraph(sval(log.faculty_in_charge.name if log.faculty_in_charge else "—")),
                 create_paragraph(sval(log.purpose)),
                 create_paragraph(sval(log.equipment.description if log.equipment else "—")),
                 create_paragraph(sval(log.quantity_borrowed)),
@@ -1803,7 +2154,7 @@ def export_history_pdf():
                 create_paragraph(sval(log.returned_at if log.returned_at else "—")),
             ])
 
-        borrow_col_widths = [120, 60, 100, 140, 120, 50, 100, 100]
+        borrow_col_widths = [70, 70, 45, 60, 55, 90, 110, 100, 40, 80, 80]
         borrow_table = Table(borrow_data, repeatRows=1, colWidths=borrow_col_widths)
         borrow_table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3F4F6")),
@@ -1831,7 +2182,7 @@ def export_history_pdf():
         elements.append(Spacer(1, 6))
         
         usage_headers = [
-            "User", "Type", "Section + Course", "Purpose",
+            "First Name", "Last Name", "Type", "Course Code", "Section", "Faculty In Charge", "Purpose",
             "Consumable", "Quantity Used", "Used At"
         ]
         
@@ -1840,16 +2191,19 @@ def export_history_pdf():
         
         for log in usages:
             usage_data.append([
-                create_paragraph(sval(log.user_name)),
+                create_paragraph(sval(log.user_first_name)),
+                create_paragraph(sval(log.user_last_name)),
                 create_paragraph(sval(log.user_type.title() if log.user_type else "")),
-                create_paragraph(sval(log.section_course)),
+                create_paragraph(sval(log.course_code)),
+                create_paragraph(sval(log.section)),
+                create_paragraph(sval(log.faculty_in_charge.name if log.faculty_in_charge else "—")),
                 create_paragraph(sval(log.purpose)),
                 create_paragraph(sval(log.consumable.description if log.consumable else "—")),
                 create_paragraph(sval(log.quantity_used)),
                 create_paragraph(sval(log.used_at)),
             ])
 
-        usage_col_widths = [120, 60, 100, 160, 150, 80, 100]
+        usage_col_widths = [70, 70, 45, 60, 55, 90, 120, 110, 45, 80]
         usage_table = Table(usage_data, repeatRows=1, colWidths=usage_col_widths)
         usage_table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3F4F6")),
@@ -3104,8 +3458,8 @@ def export_analytics_pdf():
 
 @app.route('/backup')
 def backup_database():
-    if session.get('role') != 'admin':
-        return redirect(url_for('dashboard'))
+    # if session.get('role') != 'admin':
+    #     return redirect(url_for('dashboard'))
     
     db_path = os.path.join(basedir, "instance", "database.db")
     backup_dir = os.path.join(basedir, "instance", "backup")
@@ -3909,8 +4263,34 @@ def print_bulk_barcodes():
                 
     return render_template('print_barcode_bulk.html', items=selected_items)
 
+import signal
+
+@app.route('/admin/shutdown', methods=['POST'])
+def shutdown():
+    """Triggers a manual backup and stops the Flask server."""
+    if session.get('role') != 'admin':
+        return redirect(url_for('dashboard'))
+    
+    # 1. Log the action
+    log_action("Emergency Shutdown", "System stop triggered via Web UI")
+    
+    # 2. Perform manual backup (in addition to atexit logic for safety)
+    try:
+        backup_database()
+    except Exception as e:
+        print(f"Shutdown backup failed: {e}")
+
+    # 3. Signal the process to stop (Windows handles SIGINT/SIGTERM)
+    # This will trigger the atexit.register(backup_database) logic
+    os.kill(os.getpid(), signal.SIGINT)
+    
+    return render_template('login.html', success="System is shutting down. You may now close the browser.")
+
 
 if __name__ == '__main__':
+    if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or not app.debug:
+        start_weekly_backup_thread()
+        atexit.register(_weekly_backup_stop_event.set)
     # Use 0.0.0.0 to be accessible from other devices if needed, 
     # but strictly localhost is safer for a standalone app.
     app.run(debug=True, host='0.0.0.0', port=5000)

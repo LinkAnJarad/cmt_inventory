@@ -17,6 +17,8 @@
           <p class="text-green-100 text-lg font-medium">Advanced Medical Equipment & Consumables Control</p>
         </div>
       </div>
+      
+      
 
       <!-- Enhanced Role Badge -->
       <div
@@ -415,6 +417,20 @@
           </svg>
           Bulk Operations
         </a>
+        <a href="/item_sets"
+          class="w-full inline-flex items-center justify-center px-4 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-semibold rounded-lg hover:from-emerald-600 hover:to-emerald-700 transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105">
+          <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7" />
+          </svg>
+          Item Sets
+        </a>
+        <a href="/faculty_in_charge"
+          class="w-full inline-flex items-center justify-center px-4 py-3 bg-gradient-to-r from-teal-500 to-teal-600 text-white font-semibold rounded-lg hover:from-teal-600 hover:to-teal-700 transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105">
+          <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+          Faculty In Charge
+        </a>
         <!-- <a href="{{ url_for('bulk_operations') }}" class="...">Bulk Operations</a>
  -->
       </div>
@@ -701,8 +717,28 @@
 
     </div>
   </div>
+
+  
+
   {% endif %}
 
+</div>
+
+<div class="mt-8 border-t pt-6">
+    <div class="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center justify-between">
+        <div>
+            <h3 class="text-red-800 font-bold">System Maintenance</h3>
+            <p class="text-red-600 text-sm">Stopping the system will terminate the server process and perform a local backup.</p>
+        </div>
+        <form action="{{ url_for('shutdown') }}" method="POST" onsubmit="return confirm('Are you sure you want to STOP the system? You will have to run run.bat to start it again.');">
+            <button type="submit" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg transition duration-200 flex items-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636" />
+                </svg>
+                Stop System & Backup
+            </button>
+        </form>
+    </div>
 </div>
 
 <!-- Barcode Scanner Modal -->

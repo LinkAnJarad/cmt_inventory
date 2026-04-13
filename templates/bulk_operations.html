@@ -14,30 +14,92 @@
       <p class="text-xs text-purple-600 font-medium">Trinity University of Asia - College of Medical Technology</p>
     </div>
 
-    <!-- Tab Navigation -->
-    <div class="mb-8">
-      <div class="flex justify-center">
-        <nav class="flex space-x-1 bg-white p-1 rounded-lg shadow-lg border border-purple-100" aria-label="Tabs">
-          <button onclick="switchTab('equipment')" id="equipment-tab" 
-                  class="tab-button active flex items-center px-6 py-3 text-sm font-medium rounded-md transition-all duration-200">
-            <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 9.172V5L8 4z"/>
+    {% if error %}
+    <div class="bg-red-50 border-l-4 border-red-400 p-4 rounded-r-lg mb-8">
+      <p class="text-sm text-red-700">{{ error }}</p>
+    </div>
+    {% endif %}
+
+    <!-- Shared User Information -->
+    <div class="bg-white rounded-2xl shadow-xl border border-purple-100 overflow-hidden mb-10">
+      <div class="px-8 py-6 bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-purple-100">
+        <div class="flex items-center space-x-3">
+          <div class="h-8 w-8 bg-purple-100 rounded-full flex items-center justify-center">
+            <svg class="h-4 w-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
             </svg>
-            Bulk Equipment Borrowing
-          </button>
-          <button onclick="switchTab('consumables')" id="consumables-tab" 
-                  class="tab-button flex items-center px-6 py-3 text-sm font-medium rounded-md transition-all duration-200">
-            <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
-            </svg>
-            Bulk Consumable Usage
-          </button>
-        </nav>
+          </div>
+          <div>
+            <h2 class="text-lg font-semibold text-gray-800">Shared User Information</h2>
+            <p class="text-sm text-gray-600">Used for both equipment borrowing and consumable usage.</p>
+          </div>
+        </div>
+      </div>
+      <div class="px-8 py-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
+            <input type="text" id="shared-first-name" required
+                   class="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition duration-200 bg-gray-50 focus:bg-white">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Last Name *</label>
+            <input type="text" id="shared-last-name" required
+                   class="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition duration-200 bg-gray-50 focus:bg-white">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Type *</label>
+            <select id="shared-type" required
+                    class="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition duration-200 bg-gray-50 focus:bg-white">
+              <option value="">Select type</option>
+              <option value="student">Student</option>
+              <option value="faculty">Faculty</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Course Code *</label>
+            <input type="text" id="shared-course-code" required
+                   placeholder="e.g., CMT"
+                   class="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition duration-200 bg-gray-50 focus:bg-white">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Section *</label>
+            <input type="text" id="shared-section" required
+                   placeholder="e.g., 1A"
+                   class="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition duration-200 bg-gray-50 focus:bg-white">
+          </div>
+        </div>
+        <div id="shared-faculty-field" class="mt-6 hidden">
+          <label class="block text-sm font-medium text-gray-700 mb-2">Faculty In Charge *</label>
+          <select id="shared-faculty"
+                  class="block w-full md:w-1/2 px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition duration-200 bg-gray-50 focus:bg-white">
+            <option value="">Select faculty in charge</option>
+            {% for faculty in faculty_list %}
+              <option value="{{ faculty.id }}">{{ faculty.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mt-6">
+          <label class="block text-sm font-medium text-gray-700 mb-2">Purpose *</label>
+          <textarea id="shared-purpose" required rows="3"
+                    placeholder="Describe the purpose for borrowing/using these items"
+                    class="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition duration-200 bg-gray-50 focus:bg-white resize-none"></textarea>
+        </div>
       </div>
     </div>
 
+    <div class="flex justify-center mb-12">
+      <button type="button" onclick="submitAllOperations()"
+              class="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all duration-200 shadow-lg hover:shadow-xl">
+        <svg class="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        Borrow + Consume All
+      </button>
+    </div>
+
     <!-- Equipment Borrowing Section -->
-    <div id="equipment-section" class="tab-content">
+    <div id="equipment-section">
       <div class="bg-white rounded-2xl shadow-xl border border-green-100 overflow-hidden">
         <!-- Equipment Header -->
         <div class="px-8 py-6 bg-gradient-to-r from-green-50 to-emerald-50 border-b border-green-100">
@@ -56,43 +118,34 @@
 
         <!-- Equipment Form -->
         <div class="px-8 py-8">
-          <form method="POST" action="{{ url_for('bulk_borrow_equipment') }}" class="space-y-8">
-            <!-- Borrower Information -->
-            <div class="space-y-6">
-              <div class="border-l-4 border-green-500 pl-4">
-                <h3 class="text-lg font-medium text-gray-900 mb-4">Borrower Information</h3>
+          <form id="equipment-form" method="POST" action="{{ url_for('bulk_borrow_equipment') }}" class="space-y-8">
+            <input type="hidden" name="borrower_first_name" id="borrower_first_name">
+            <input type="hidden" name="borrower_last_name" id="borrower_last_name">
+            <input type="hidden" name="borrower_type" id="borrower_type">
+            <input type="hidden" name="course_code" id="borrower_course_code">
+            <input type="hidden" name="section" id="borrower_section">
+            <input type="hidden" name="purpose" id="borrower_purpose">
+            <input type="hidden" name="faculty_in_charge_id" id="borrower_faculty_in_charge_id">
+
+            <!-- Item Sets -->
+            <div class="space-y-3">
+              <div class="border-l-4 border-emerald-500 pl-4">
+                <h3 class="text-lg font-medium text-gray-900">Quick Item Sets</h3>
+                <p class="text-sm text-gray-600">Pick a predefined set to auto-fill equipment and consumables.</p>
               </div>
-              
-              <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-2">Borrower Name *</label>
-                  <input type="text" name="borrower_name" required
-                         class="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 bg-gray-50 focus:bg-white">
+              <div class="flex flex-col md:flex-row md:items-center gap-3">
+                <select id="item-set-select"
+                        class="block w-full md:w-2/3 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white">
+                  <option value="">Choose a set</option>
+                  {% for s in item_sets %}
+                    <option value="{{ s.id }}">{{ s.name }}</option>
+                  {% endfor %}
+                </select>
+                <div class="flex items-center gap-3">
+                  <button type="button" onclick="applyItemSet()"
+                          class="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Apply Set</button>
+                  <a href="{{ url_for('item_sets') }}" class="text-sm text-emerald-700 hover:text-emerald-900">Manage Sets</a>
                 </div>
-                
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-2">Borrower Type *</label>
-                  <select name="borrower_type" required
-                          class="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 bg-gray-50 focus:bg-white">
-                    <option value="">Select type</option>
-                    <option value="student">Student</option>
-                    <option value="faculty">Faculty</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-2">Section + Course *</label>
-                  <input type="text" name="section_course" required
-                         placeholder="e.g., CMT-1A Clinical Chemistry"
-                         class="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 bg-gray-50 focus:bg-white">
-                </div>
-              </div>
-              
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Purpose *</label>
-                <textarea name="purpose" required rows="3"
-                          placeholder="Describe the purpose for borrowing these equipment items"
-                          class="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 bg-gray-50 focus:bg-white resize-none"></textarea>
               </div>
             </div>
 
@@ -170,7 +223,7 @@
     </div>
 
     <!-- Consumables Usage Section -->
-    <div id="consumables-section" class="tab-content hidden">
+    <div id="consumables-section" class="mt-10">
       <div class="bg-white rounded-2xl shadow-xl border border-blue-100 overflow-hidden">
         <!-- Consumables Header -->
         <div class="px-8 py-6 bg-gradient-to-r from-blue-50 to-cyan-50 border-b border-blue-100">
@@ -189,43 +242,34 @@
 
         <!-- Consumables Form -->
         <div class="px-8 py-8">
-          <form method="POST" action="{{ url_for('bulk_use_consumables') }}" class="space-y-8">
-            <!-- User Information -->
-            <div class="space-y-6">
-              <div class="border-l-4 border-blue-500 pl-4">
-                <h3 class="text-lg font-medium text-gray-900 mb-4">User Information</h3>
+          <form id="consumables-form" method="POST" action="{{ url_for('bulk_use_consumables') }}" class="space-y-8">
+            <input type="hidden" name="user_first_name" id="user_first_name">
+            <input type="hidden" name="user_last_name" id="user_last_name">
+            <input type="hidden" name="user_type" id="user_type">
+            <input type="hidden" name="course_code" id="user_course_code">
+            <input type="hidden" name="section" id="user_section">
+            <input type="hidden" name="purpose" id="user_purpose">
+            <input type="hidden" name="faculty_in_charge_id" id="user_faculty_in_charge_id">
+
+            <!-- Item Sets -->
+            <div class="space-y-3">
+              <div class="border-l-4 border-sky-500 pl-4">
+                <h3 class="text-lg font-medium text-gray-900">Quick Item Sets</h3>
+                <p class="text-sm text-gray-600">Pick a predefined set to auto-fill equipment and consumables.</p>
               </div>
-              
-              <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-2">User Name *</label>
-                  <input type="text" name="user_name" required
-                         class="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 bg-gray-50 focus:bg-white">
+              <div class="flex flex-col md:flex-row md:items-center gap-3">
+                <select id="item-set-select-consumables"
+                        class="block w-full md:w-2/3 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 bg-white">
+                  <option value="">Choose a set</option>
+                  {% for s in item_sets %}
+                    <option value="{{ s.id }}">{{ s.name }}</option>
+                  {% endfor %}
+                </select>
+                <div class="flex items-center gap-3">
+                  <button type="button" onclick="applyItemSet('consumables')"
+                          class="px-4 py-2 bg-sky-600 text-white rounded-lg text-sm font-medium hover:bg-sky-700">Apply Set</button>
+                  <a href="{{ url_for('item_sets') }}" class="text-sm text-sky-700 hover:text-sky-900">Manage Sets</a>
                 </div>
-                
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-2">User Type *</label>
-                  <select name="user_type" required
-                          class="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 bg-gray-50 focus:bg-white">
-                    <option value="">Select type</option>
-                    <option value="student">Student</option>
-                    <option value="faculty">Faculty</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-2">Section + Course *</label>
-                  <input type="text" name="section_course" required
-                         placeholder="e.g., CMT-1A Clinical Chemistry"
-                         class="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 bg-gray-50 focus:bg-white">
-                </div>
-              </div>
-              
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Purpose *</label>
-                <textarea name="purpose" required rows="3"
-                          placeholder="Describe the purpose for using these consumables"
-                          class="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 bg-gray-50 focus:bg-white resize-none"></textarea>
               </div>
             </div>
 
@@ -331,24 +375,230 @@
   </div>
 </div>
 
-<!-- JavaScript for Tab Switching and Dynamic Forms -->
+<!-- JavaScript for Dynamic Forms -->
 <script>
-  function switchTab(tab) {
-    // Hide all sections
-    document.getElementById('equipment-section').classList.add('hidden');
-    document.getElementById('consumables-section').classList.add('hidden');
-    
-    // Remove active class from all tabs
-    document.getElementById('equipment-tab').classList.remove('active');
-    document.getElementById('consumables-tab').classList.remove('active');
-    
-    // Show selected section and activate tab
-    if (tab === 'equipment') {
-      document.getElementById('equipment-section').classList.remove('hidden');
-      document.getElementById('equipment-tab').classList.add('active');
+  const itemSets = {{ item_sets_payload | tojson }};
+
+  function applyItemSet(context) {
+    const selectId = context === 'consumables' ? 'item-set-select-consumables' : 'item-set-select';
+    const select = document.getElementById(selectId);
+    const setId = parseInt(select.value, 10);
+    const selectedSet = itemSets.find(s => s.id === setId);
+    if (!selectedSet) {
+      return;
+    }
+
+    const otherSelectId = context === 'consumables' ? 'item-set-select' : 'item-set-select-consumables';
+    const otherSelect = document.getElementById(otherSelectId);
+    if (otherSelect) {
+      otherSelect.value = select.value;
+    }
+
+    const equipmentList = document.getElementById('equipment-list');
+    equipmentList.innerHTML = '';
+
+    const consumablesList = document.getElementById('consumables-list');
+    consumablesList.innerHTML = '';
+
+    if (selectedSet.equipment_items && selectedSet.equipment_items.length > 0) {
+      selectedSet.equipment_items.forEach(item => {
+        addEquipmentItem();
+        const row = equipmentList.lastElementChild;
+        const itemSelect = row.querySelector('select[name="equipment_ids[]"]');
+        const qtyInput = row.querySelector('input[name="quantities[]"]');
+        if (itemSelect) {
+          itemSelect.value = String(item.item_id);
+        }
+        if (qtyInput) {
+          qtyInput.value = item.quantity;
+        }
+      });
     } else {
-      document.getElementById('consumables-section').classList.remove('hidden');
-      document.getElementById('consumables-tab').classList.add('active');
+      addEquipmentItem();
+    }
+
+    if (selectedSet.consumable_items && selectedSet.consumable_items.length > 0) {
+      selectedSet.consumable_items.forEach(item => {
+        addConsumableItem();
+        const row = consumablesList.lastElementChild;
+        const itemSelect = row.querySelector('select[name="consumable_ids[]"]');
+        const qtyInput = row.querySelector('input[name="quantities[]"]');
+        if (itemSelect) {
+          itemSelect.value = String(item.item_id);
+          updateConsumableInfo(itemSelect);
+        }
+        if (qtyInput) {
+          qtyInput.value = item.quantity;
+        }
+      });
+    } else {
+      addConsumableItem();
+    }
+  }
+
+  function applyItemSetFromQuery() {
+    const params = new URLSearchParams(window.location.search);
+    const setId = params.get('set_id');
+    if (!setId) {
+      return;
+    }
+
+    const selectEquipment = document.getElementById('item-set-select');
+    const selectConsumables = document.getElementById('item-set-select-consumables');
+    if (selectEquipment) {
+      selectEquipment.value = setId;
+    }
+    if (selectConsumables) {
+      selectConsumables.value = setId;
+    }
+
+    applyItemSet();
+  }
+
+  applyItemSetFromQuery();
+
+  function syncSharedInfo() {
+    const firstName = document.getElementById('shared-first-name').value.trim();
+    const lastName = document.getElementById('shared-last-name').value.trim();
+    const type = document.getElementById('shared-type').value;
+    const courseCode = document.getElementById('shared-course-code').value.trim();
+    const section = document.getElementById('shared-section').value.trim();
+    const purpose = document.getElementById('shared-purpose').value.trim();
+    const faculty = document.getElementById('shared-faculty').value;
+
+    const borrowerFirstName = document.getElementById('borrower_first_name');
+    const borrowerLastName = document.getElementById('borrower_last_name');
+    const borrowerType = document.getElementById('borrower_type');
+    const borrowerCourseCode = document.getElementById('borrower_course_code');
+    const borrowerSection = document.getElementById('borrower_section');
+    const borrowerPurpose = document.getElementById('borrower_purpose');
+    const borrowerFaculty = document.getElementById('borrower_faculty_in_charge_id');
+    const userFirstName = document.getElementById('user_first_name');
+    const userLastName = document.getElementById('user_last_name');
+    const userType = document.getElementById('user_type');
+    const userCourseCode = document.getElementById('user_course_code');
+    const userSection = document.getElementById('user_section');
+    const userPurpose = document.getElementById('user_purpose');
+    const userFaculty = document.getElementById('user_faculty_in_charge_id');
+
+    if (borrowerFirstName) borrowerFirstName.value = firstName;
+    if (borrowerLastName) borrowerLastName.value = lastName;
+    if (borrowerType) borrowerType.value = type;
+    if (borrowerCourseCode) borrowerCourseCode.value = courseCode;
+    if (borrowerSection) borrowerSection.value = section;
+    if (borrowerPurpose) borrowerPurpose.value = purpose;
+    if (borrowerFaculty) borrowerFaculty.value = faculty;
+    if (userFirstName) userFirstName.value = firstName;
+    if (userLastName) userLastName.value = lastName;
+    if (userType) userType.value = type;
+    if (userCourseCode) userCourseCode.value = courseCode;
+    if (userSection) userSection.value = section;
+    if (userPurpose) userPurpose.value = purpose;
+    if (userFaculty) userFaculty.value = faculty;
+  }
+
+  function toggleSharedFaculty() {
+    const type = document.getElementById('shared-type').value;
+    const field = document.getElementById('shared-faculty-field');
+    const select = document.getElementById('shared-faculty');
+
+    if (type === 'student') {
+      field.classList.remove('hidden');
+      select.setAttribute('required', 'required');
+    } else {
+      field.classList.add('hidden');
+      select.removeAttribute('required');
+      select.value = '';
+    }
+  }
+
+  ['shared-first-name', 'shared-last-name', 'shared-type', 'shared-course-code', 'shared-section', 'shared-purpose'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input', syncSharedInfo);
+      el.addEventListener('change', syncSharedInfo);
+    }
+  });
+
+  const sharedType = document.getElementById('shared-type');
+  if (sharedType) {
+    sharedType.addEventListener('change', toggleSharedFaculty);
+  }
+
+  const sharedFaculty = document.getElementById('shared-faculty');
+  if (sharedFaculty) {
+    sharedFaculty.addEventListener('change', syncSharedInfo);
+  }
+
+  toggleSharedFaculty();
+
+  const equipmentForm = document.getElementById('equipment-form');
+  if (equipmentForm) {
+    equipmentForm.addEventListener('submit', syncSharedInfo);
+  }
+
+  const consumablesForm = document.getElementById('consumables-form');
+  if (consumablesForm) {
+    consumablesForm.addEventListener('submit', syncSharedInfo);
+  }
+
+  function hasSelectedItems(form, selector) {
+    if (!form) {
+      return false;
+    }
+    return Array.from(form.querySelectorAll(selector)).some(el => el.value && el.value.trim() !== '');
+  }
+
+  async function submitAllOperations() {
+    syncSharedInfo();
+
+    const firstName = document.getElementById('shared-first-name').value.trim();
+    const lastName = document.getElementById('shared-last-name').value.trim();
+    const type = document.getElementById('shared-type').value;
+    const courseCode = document.getElementById('shared-course-code').value.trim();
+    const section = document.getElementById('shared-section').value.trim();
+    const purpose = document.getElementById('shared-purpose').value.trim();
+    const faculty = document.getElementById('shared-faculty').value;
+
+    if (!firstName || !lastName || !type || !courseCode || !section || !purpose) {
+      alert('Please complete the shared user information before submitting.');
+      return;
+    }
+
+    if (type === 'student' && !faculty) {
+      alert('Faculty in Charge is required for student entries.');
+      return;
+    }
+
+    const hasEquipment = hasSelectedItems(equipmentForm, 'select[name="equipment_ids[]"]');
+    const hasConsumables = hasSelectedItems(consumablesForm, 'select[name="consumable_ids[]"]');
+
+    if (!hasEquipment && !hasConsumables) {
+      alert('Please select at least one equipment or consumable item.');
+      return;
+    }
+
+    const requests = [];
+    if (hasEquipment && equipmentForm) {
+      requests.push(fetch(equipmentForm.action, {
+        method: 'POST',
+        body: new FormData(equipmentForm)
+      }));
+    }
+
+    if (hasConsumables && consumablesForm) {
+      requests.push(fetch(consumablesForm.action, {
+        method: 'POST',
+        body: new FormData(consumablesForm)
+      }));
+    }
+
+    try {
+      await Promise.all(requests);
+      window.location.href = '{{ url_for("dashboard") }}';
+    } catch (error) {
+      console.error(error);
+      alert('Something went wrong while submitting. Please try again.');
     }
   }
 
@@ -393,6 +643,7 @@
       item.remove();
     }
   }
+
 
   function updateConsumableInfo(selectElement) {
     const selectedOption = selectElement.options[selectElement.selectedIndex];
@@ -515,22 +766,6 @@
     }
   }
   
-  .tab-button {
-    color: #6B7280;
-    background-color: transparent;
-  }
-  
-  .tab-button.active {
-    color: #7C3AED;
-    background-color: #F3F4F6;
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-  }
-  
-  .tab-button:hover:not(.active) {
-    color: #374151;
-    background-color: #F9FAFB;
-  }
-  
   input:focus, textarea:focus, select:focus {
     box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
   }
@@ -555,9 +790,6 @@
   // Handle scanned barcodes for bulk operations
   window.onBarcodeScanned = function(data) {
     if (data.type === 'equipment') {
-      // Switch to equipment tab if not already there
-      switchTab('equipment');
-      
       // Find an empty row or add a new one
       let lastRow = document.querySelector('#equipment-list .equipment-item:last-child');
       let select = lastRow ? lastRow.querySelector('select') : null;
@@ -578,9 +810,6 @@
       }
       
     } else if (data.type === 'consumable') {
-      // Switch to consumables tab if not already there
-      switchTab('consumables');
-      
       // Find an empty row or add a new one
       let lastRow = document.querySelector('#consumables-list .consumable-item:last-child');
       let select = lastRow ? lastRow.querySelector('select') : null;

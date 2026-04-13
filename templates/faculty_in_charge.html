@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="max-w-5xl mx-auto">
+  <div class="bg-white rounded-2xl shadow-xl border border-emerald-100 overflow-hidden">
+    <div class="px-8 py-6 bg-gradient-to-r from-emerald-50 to-green-50 border-b border-emerald-100">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+          <div class="h-10 w-10 bg-emerald-100 rounded-full flex items-center justify-center">
+            <svg class="h-5 w-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+            </svg>
+          </div>
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900">Faculty In Charge</h1>
+            <p class="text-sm text-gray-600">Manage dropdown choices for student transactions.</p>
+          </div>
+        </div>
+        <a href="{{ url_for('dashboard') }}"
+           class="inline-flex items-center px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
+          Back to Dashboard
+        </a>
+      </div>
+    </div>
+
+    <div class="p-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div class="bg-gray-50 border border-gray-200 rounded-xl p-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-4">{% if edit_entry %}Edit{% else %}Add{% endif %} Faculty In Charge</h2>
+        <form method="POST" action="{% if edit_entry %}{{ url_for('edit_faculty_in_charge', faculty_id=edit_entry.id) }}{% else %}{{ url_for('faculty_in_charge') }}{% endif %}" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Faculty Name *</label>
+            <input type="text" name="name" required value="{{ edit_entry.name if edit_entry else '' }}"
+                   class="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white" />
+          </div>
+          <div class="flex items-center gap-3">
+            <button type="submit"
+                    class="inline-flex items-center justify-center px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700">
+              {% if edit_entry %}Update{% else %}Add{% endif %}
+            </button>
+            {% if edit_entry %}
+              <a href="{{ url_for('faculty_in_charge') }}" class="text-sm text-gray-600 hover:text-gray-800">Cancel</a>
+            {% endif %}
+          </div>
+        </form>
+      </div>
+
+      <div>
+        <h2 class="text-lg font-semibold text-gray-800 mb-4">Current Faculty List</h2>
+        <div class="space-y-3">
+          {% for entry in faculty_list %}
+            <div class="bg-white border border-gray-200 rounded-xl p-4 flex items-center justify-between">
+              <span class="font-medium text-gray-800">{{ entry.name }}</span>
+              <div class="flex items-center gap-3">
+                <a href="{{ url_for('edit_faculty_in_charge', faculty_id=entry.id) }}"
+                   class="text-sm text-emerald-700 hover:text-emerald-900">Edit</a>
+                <form method="POST" action="{{ url_for('delete_faculty_in_charge', faculty_id=entry.id) }}" onsubmit="return confirm('Delete this faculty entry?')">
+                  <button type="submit" class="text-sm text-red-600 hover:text-red-800">Delete</button>
+                </form>
+              </div>
+            </div>
+          {% else %}
+            <p class="text-sm text-gray-500">No faculty entries yet.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

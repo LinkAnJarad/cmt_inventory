@@ -38,31 +38,44 @@ class Consumable(db.Model):
     is_returnable = db.Column(db.Boolean, default=False, nullable=False)
     barcode = db.Column(db.String(50), nullable=True)  # Barcode for quick scanning
 
+class FacultyInCharge(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False, unique=True)
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+
 class BorrowLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     # Changed from student-specific to borrower/user information
-    borrower_name = db.Column(db.String(100), nullable=False)
+    borrower_first_name = db.Column(db.String(60), nullable=False)
+    borrower_last_name = db.Column(db.String(60), nullable=False)
     borrower_type = db.Column(db.String(20), nullable=False)  # 'student' or 'faculty'
-    section_course = db.Column(db.String(150), nullable=False)  # Combined section + course
+    course_code = db.Column(db.String(50), nullable=False)
+    section = db.Column(db.String(50), nullable=False)
     purpose = db.Column(db.Text, nullable=False)
+    faculty_in_charge_id = db.Column(db.Integer, db.ForeignKey('faculty_in_charge.id'), nullable=True)
     equipment_id = db.Column(db.Integer, db.ForeignKey('equipment.id'))
     # Added quantity for bulk borrowing
     quantity_borrowed = db.Column(db.Integer, default=1, nullable=False)
     borrowed_at = db.Column(db.DateTime, default=db.func.current_timestamp())
     returned_at = db.Column(db.DateTime, nullable=True)
     equipment = db.relationship('Equipment', backref='borrow_logs')
+    faculty_in_charge = db.relationship('FacultyInCharge', backref='borrow_logs')
 
 class UsageLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     # Changed from student-specific to user information
-    user_name = db.Column(db.String(100), nullable=False)
+    user_first_name = db.Column(db.String(60), nullable=False)
+    user_last_name = db.Column(db.String(60), nullable=False)
     user_type = db.Column(db.String(20), nullable=False)  # 'student' or 'faculty'
-    section_course = db.Column(db.String(150), nullable=False)  # Combined section + course
+    course_code = db.Column(db.String(50), nullable=False)
+    section = db.Column(db.String(50), nullable=False)
     purpose = db.Column(db.Text, nullable=False)
+    faculty_in_charge_id = db.Column(db.Integer, db.ForeignKey('faculty_in_charge.id'), nullable=True)
     consumable_id = db.Column(db.Integer, db.ForeignKey('consumable.id'))
     quantity_used = db.Column(db.Integer)
     used_at = db.Column(db.DateTime, default=db.func.current_timestamp())
     consumable = db.relationship('Consumable', backref='usage_logs')
+    faculty_in_charge = db.relationship('FacultyInCharge', backref='usage_logs')
     returned_at = db.Column(db.DateTime, nullable=True)
 
 
@@ -115,3 +128,24 @@ class AuditLog(db.Model):
     ip_address = db.Column(db.String(45), nullable=True)
     
     user = db.relationship('User', backref='audit_logs')
+
+class ItemSet(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    set_type = db.Column(db.String(20), nullable=True, default='mixed')  # legacy compatibility
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+
+    items = db.relationship('ItemSetItem', backref='item_set', cascade='all, delete-orphan')
+    creator = db.relationship('User', backref='item_sets')
+
+
+class ItemSetItem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    set_id = db.Column(db.Integer, db.ForeignKey('item_set.id'), nullable=False)
+    equipment_id = db.Column(db.Integer, db.ForeignKey('equipment.id'), nullable=True)
+    consumable_id = db.Column(db.Integer, db.ForeignKey('consumable.id'), nullable=True)
+    quantity = db.Column(db.Integer, default=1, nullable=False)
+
+    equipment = db.relationship('Equipment', backref='item_set_items')
+    consumable = db.relationship('Consumable', backref='item_set_items')

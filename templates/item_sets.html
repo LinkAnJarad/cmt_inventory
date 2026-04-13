@@ -1,0 +1,219 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+  <div class="bg-white rounded-2xl shadow-xl border border-green-100 overflow-hidden">
+    <div class="px-8 py-6 bg-gradient-to-r from-green-50 to-blue-50 border-b border-green-100">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+          <div class="h-10 w-10 bg-green-100 rounded-full flex items-center justify-center">
+            <svg class="h-5 w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 0h6" />
+            </svg>
+          </div>
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900">Item Sets</h1>
+            <p class="text-sm text-gray-600">Create ready-to-use sets for bulk borrowing or consumable usage.</p>
+          </div>
+        </div>
+        <a href="{{ url_for('bulk_operations') }}"
+          class="inline-flex items-center px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
+          Back to Bulk Operations
+        </a>
+      </div>
+    </div>
+
+    <div class="p-8">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div class="bg-gray-50 border border-gray-200 rounded-xl p-6">
+          <h2 class="text-lg font-semibold text-gray-800 mb-4">Create Mixed Item Set</h2>
+          <form method="POST" action="{{ url_for('item_sets') }}" class="space-y-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Set Name *</label>
+              <input type="text" name="set_name" required
+                class="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white" />
+            </div>
+
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <label class="block text-sm font-medium text-gray-700">Equipment Items</label>
+                <button type="button" onclick="addEquipmentSetItem()"
+                  class="text-emerald-700 text-sm font-medium hover:text-emerald-900">+ Add Equipment</button>
+              </div>
+              <div id="equipment-set-items" class="space-y-3">
+                <div class="equipment-set-item grid grid-cols-1 md:grid-cols-3 gap-3 bg-white p-3 rounded-lg border border-gray-200">
+                  <div class="md:col-span-2">
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Equipment</label>
+                    <select name="equipment_ids[]"
+                      class="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                      <option value="">Choose equipment</option>
+                      {% for item in equipment %}
+                        <option value="{{ item.id }}">ID: {{ item.id }} {{ item.description }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Quantity</label>
+                    <input type="number" name="equipment_quantities[]" min="1" value="1"
+                      class="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+                  </div>
+                  <div class="md:col-span-3">
+                    <button type="button" onclick="removeEquipmentSetItem(this)"
+                      class="text-red-600 text-xs font-medium hover:text-red-800">Remove</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <label class="block text-sm font-medium text-gray-700">Consumable Items</label>
+                <button type="button" onclick="addConsumableSetItem()"
+                  class="text-sky-700 text-sm font-medium hover:text-sky-900">+ Add Consumable</button>
+              </div>
+              <div id="consumable-set-items" class="space-y-3">
+                <div class="consumable-set-item grid grid-cols-1 md:grid-cols-3 gap-3 bg-white p-3 rounded-lg border border-gray-200">
+                  <div class="md:col-span-2">
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Consumable</label>
+                    <select name="consumable_ids[]"
+                      class="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500">
+                      <option value="">Choose consumable</option>
+                      {% for item in consumables %}
+                        <option value="{{ item.id }}">ID: {{ item.id }} {{ item.description }} (Lot: {{ item.lot_number }})</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Quantity</label>
+                    <input type="number" name="consumable_quantities[]" min="1" value="1"
+                      class="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500" />
+                  </div>
+                  <div class="md:col-span-3">
+                    <button type="button" onclick="removeConsumableSetItem(this)"
+                      class="text-red-600 text-xs font-medium hover:text-red-800">Remove</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <button type="submit"
+              class="w-full inline-flex items-center justify-center px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700">
+              Save Item Set
+            </button>
+          </form>
+        </div>
+
+        <div>
+          <h2 class="text-lg font-semibold text-gray-800 mb-4">Existing Item Sets</h2>
+          <div class="space-y-4">
+            {% for s in item_sets %}
+              <div class="bg-white border border-gray-200 rounded-xl p-4">
+                <div class="flex items-center justify-between mb-2">
+                  <div>
+                    <h3 class="font-semibold text-gray-800">{{ s.name }}</h3>
+                    <p class="text-xs text-gray-500">{{ s.items|length }} item(s)</p>
+                  </div>
+                  <div class="flex items-center space-x-3">
+                    <a href="{{ url_for('bulk_operations') }}?set_id={{ s.id }}"
+                       class="text-emerald-700 text-sm font-medium hover:text-emerald-900">Borrow Set</a>
+                    <form method="POST" action="{{ url_for('delete_item_set', set_id=s.id) }}" onsubmit="return confirm('Delete this set?')">
+                      <button type="submit" class="text-red-600 text-sm font-medium hover:text-red-800">Delete</button>
+                    </form>
+                  </div>
+                </div>
+                <ul class="text-sm text-gray-700 list-disc pl-5 space-y-1">
+                  {% for item in s.items %}
+                    {% if item.equipment %}
+                      <li>{{ item.quantity }}x {{ item.equipment.description }}</li>
+                    {% elif item.consumable %}
+                      <li>{{ item.quantity }}x {{ item.consumable.description }} (Lot: {{ item.consumable.lot_number }})</li>
+                    {% endif %}
+                  {% endfor %}
+                </ul>
+              </div>
+            {% else %}
+              <p class="text-sm text-gray-500">No item sets yet.</p>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function addEquipmentSetItem() {
+    const list = document.getElementById('equipment-set-items');
+    const newItem = document.createElement('div');
+    newItem.className = 'equipment-set-item grid grid-cols-1 md:grid-cols-3 gap-3 bg-white p-3 rounded-lg border border-gray-200';
+    newItem.innerHTML = `
+      <div class="md:col-span-2">
+        <label class="block text-xs font-medium text-gray-500 mb-1">Equipment</label>
+        <select name="equipment_ids[]"
+          class="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500">
+          <option value="">Choose equipment</option>
+          {% for item in equipment %}
+            <option value="{{ item.id }}">ID: {{ item.id }} {{ item.description }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-500 mb-1">Quantity</label>
+        <input type="number" name="equipment_quantities[]" min="1" value="1"
+          class="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500" />
+      </div>
+      <div class="md:col-span-3">
+        <button type="button" onclick="removeEquipmentSetItem(this)"
+          class="text-red-600 text-xs font-medium hover:text-red-800">Remove</button>
+      </div>
+    `;
+    list.appendChild(newItem);
+  }
+
+  function removeEquipmentSetItem(button) {
+    const item = button.closest('.equipment-set-item');
+    const list = document.getElementById('equipment-set-items');
+    if (list.children.length > 1) {
+      item.remove();
+    }
+  }
+
+  function addConsumableSetItem() {
+    const list = document.getElementById('consumable-set-items');
+    const newItem = document.createElement('div');
+    newItem.className = 'consumable-set-item grid grid-cols-1 md:grid-cols-3 gap-3 bg-white p-3 rounded-lg border border-gray-200';
+    newItem.innerHTML = `
+      <div class="md:col-span-2">
+        <label class="block text-xs font-medium text-gray-500 mb-1">Consumable</label>
+        <select name="consumable_ids[]"
+          class="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+          <option value="">Choose consumable</option>
+          {% for item in consumables %}
+            <option value="{{ item.id }}">ID: {{ item.id }} {{ item.description }} (Lot: {{ item.lot_number }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-500 mb-1">Quantity</label>
+        <input type="number" name="consumable_quantities[]" min="1" value="1"
+          class="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+      </div>
+      <div class="md:col-span-3">
+        <button type="button" onclick="removeConsumableSetItem(this)"
+          class="text-red-600 text-xs font-medium hover:text-red-800">Remove</button>
+      </div>
+    `;
+    list.appendChild(newItem);
+  }
+
+  function removeConsumableSetItem(button) {
+    const item = button.closest('.consumable-set-item');
+    const list = document.getElementById('consumable-set-items');
+    if (list.children.length > 1) {
+      item.remove();
+    }
+  }
+
+</script>
+{% endblock %}

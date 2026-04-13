@@ -7,12 +7,16 @@
     <h2 class="text-lg font-semibold mb-2">Borrow Details</h2>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
       <div>
-        <div class="text-gray-500">Student</div>
-        <div class="font-medium text-gray-900">{{ log.student_name }} ({{ log.student_number }})</div>
+        <div class="text-gray-500">Borrower</div>
+        <div class="font-medium text-gray-900">{{ log.borrower_first_name }} {{ log.borrower_last_name }} ({{ log.borrower_type.title() }})</div>
       </div>
       <div>
-        <div class="text-gray-500">Course / Section</div>
-        <div class="font-medium text-gray-900">{{ log.course }} / {{ log.section }}</div>
+        <div class="text-gray-500">Course Code</div>
+        <div class="font-medium text-gray-900">{{ log.course_code }}</div>
+      </div>
+      <div>
+        <div class="text-gray-500">Section</div>
+        <div class="font-medium text-gray-900">{{ log.section }}</div>
       </div>
       <div>
         <div class="text-gray-500">Equipment</div>

@@ -8,11 +8,15 @@
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
       <div>
         <div class="text-gray-500">User</div>
-        <div class="font-medium text-gray-900">{{ log.user_name }} ({{ log.user_type.title() }})</div>
+        <div class="font-medium text-gray-900">{{ log.user_first_name }} {{ log.user_last_name }} ({{ log.user_type.title() }})</div>
       </div>
       <div>
-        <div class="text-gray-500">Section + Course</div>
-        <div class="font-medium text-gray-900">{{ log.section_course }}</div>
+        <div class="text-gray-500">Course Code</div>
+        <div class="font-medium text-gray-900">{{ log.course_code }}</div>
+      </div>
+      <div>
+        <div class="text-gray-500">Section</div>
+        <div class="font-medium text-gray-900">{{ log.section }}</div>
       </div>
       <div>
         <div class="text-gray-500">Consumable</div>

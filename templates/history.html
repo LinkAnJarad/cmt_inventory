@@ -211,13 +211,22 @@
             {%- endmacro %}
 
             <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-              {{ sort_link_b('Borrower', 'borrower_name') }}
+              {{ sort_link_b('First Name', 'borrower_first_name') }}
+            </th>
+            <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              {{ sort_link_b('Last Name', 'borrower_last_name') }}
             </th>
             <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
               {{ sort_link_b('Type', 'borrower_type') }}
             </th>
             <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-              {{ sort_link_b('Section + Course', 'section_course') }}
+              {{ sort_link_b('Course Code', 'course_code') }}
+            </th>
+            <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              {{ sort_link_b('Section', 'section') }}
+            </th>
+            <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              {{ sort_link_b('Faculty In Charge', 'faculty_in_charge') }}
             </th>
             <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
               {{ sort_link_b('Purpose', 'purpose') }}
@@ -245,15 +254,20 @@
             <td class="px-6 py-4 whitespace-nowrap">
               <div class="flex items-center">
                 <div class="h-2 w-2 bg-green-500 rounded-full mr-3"></div>
-                <span class="text-sm font-semibold text-gray-900">{{ log.borrower_name }}</span>
+                <span class="text-sm font-semibold text-gray-900">{{ log.borrower_first_name }}</span>
               </div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+              {{ log.borrower_last_name }}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
               <span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium {% if log.borrower_type == 'student' %}bg-blue-100 text-blue-800{% else %}bg-purple-100 text-purple-800{% endif %}">
                 {{ log.borrower_type.title() }}
               </span>
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ log.section_course }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ log.course_code }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ log.section }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ log.faculty_in_charge.name if log.faculty_in_charge else '—' }}</td>
             <td class="px-6 py-4 text-sm text-gray-700 max-w-xs truncate" title="{{ log.purpose }}">{{ log.purpose }}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 font-medium">{{ log.equipment.description if log.equipment else '—' }}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
@@ -402,13 +416,22 @@
             {%- endmacro %}
 
             <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-              {{ sort_link_u('User', 'user_name') }}
+              {{ sort_link_u('First Name', 'user_first_name') }}
+            </th>
+            <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              {{ sort_link_u('Last Name', 'user_last_name') }}
             </th>
             <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
               {{ sort_link_u('Type', 'user_type') }}
             </th>
             <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-              {{ sort_link_u('Section + Course', 'section_course') }}
+              {{ sort_link_u('Course Code', 'course_code') }}
+            </th>
+            <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              {{ sort_link_u('Section', 'section') }}
+            </th>
+            <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              {{ sort_link_u('Faculty In Charge', 'faculty_in_charge') }}
             </th>
             <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
               {{ sort_link_u('Purpose', 'purpose') }}
@@ -436,15 +459,20 @@
             <td class="px-6 py-4 whitespace-nowrap">
               <div class="flex items-center">
                 <div class="h-2 w-2 bg-blue-500 rounded-full mr-3"></div>
-                <span class="text-sm font-semibold text-gray-900">{{ log.user_name }}</span>
+                <span class="text-sm font-semibold text-gray-900">{{ log.user_first_name }}</span>
               </div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+              {{ log.user_last_name }}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
               <span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium {% if log.user_type == 'student' %}bg-blue-100 text-blue-800{% else %}bg-purple-100 text-purple-800{% endif %}">
                 {{ log.user_type.title() }}
               </span>
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ log.section_course }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ log.course_code }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ log.section }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ log.faculty_in_charge.name if log.faculty_in_charge else '—' }}</td>
             <td class="px-6 py-4 text-sm text-gray-700 max-w-xs truncate" title="{{ log.purpose }}">{{ log.purpose }}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 font-medium">{{ log.consumable.description if log.consumable else '—' }}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
